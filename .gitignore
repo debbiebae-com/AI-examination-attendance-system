@@ -1,0 +1,18 @@
+# Python
+__pycache__/
+*.pyc
+.venv/
+.pytest_cache/
+
+# Frontend
+node_modules/
+.next/
+
+# Local databases and generated model files
+*.db
+*.onnx
+backend/data/*.db
+
+# Secrets and local env
+.env
+.env.*
