@@ -1,10 +1,9 @@
-// Optional runtime overrides, copied unchanged to dist/config.js.
-// Prefer VITE_SUPABASE_URL / VITE_SUPABASE_ANON_KEY / VITE_ENROLL_EXAM in Netlify.
-// Values here support older deployments; non-empty VITE_* variables take precedence.
-// NEVER put a service_role or sb_secret_ key in this public file.
+// Frontend configuration.
 window.ENROLL_CONFIG = {
   API_BASE: "",
-  EXAM: "",
-  SUPABASE_URL: "",
-  SUPABASE_ANON_KEY: "",
+  EXAM: "CS101",
+
+  // Supabase public configuration
+  SUPABASE_URL: "https://lmsrsotkrdiijtkmdkvb.supabase.co",
+  SUPABASE_ANON_KEY: "sb_publishable_nNYr3z6dFtuwgaikHGI3ww_zxYNNLF3",
 };
