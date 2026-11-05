@@ -103,6 +103,11 @@ def main() -> None:
     parser.add_argument("--det-size", type=int, default=640, help="detector resolution (lower = faster, may miss distant faces)")
     parser.add_argument("--threads", type=int, default=None, help="onnxruntime CPU threads")
     parser.add_argument(
+        "--model",
+        default="buffalo_l",
+        help="InsightFace model pack; MUST match the one used for enrollment (ENROLL_MODEL on the web server)",
+    )
+    parser.add_argument(
         "--liveness",
         action="store_true",
         help="enable the passive liveness model (off by default; it is unreliable on some cameras)",
@@ -129,7 +134,10 @@ def main() -> None:
     else:
         print("Passive liveness check: OFF (recognition only)")
     embedder = InsightFaceEmbedder(
-        liveness=args.liveness, det_size=(args.det_size, args.det_size), threads=args.threads
+        model_name=args.model,
+        liveness=args.liveness,
+        det_size=(args.det_size, args.det_size),
+        threads=args.threads,
     )
 
     tracker = FaceTracker()

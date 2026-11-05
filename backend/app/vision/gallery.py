@@ -71,12 +71,18 @@ def enroll_students(session: Session, embedder: FaceEmbedder) -> list[EnrollResu
     return results
 
 
-def save_capture_samples(session: Session, student_id: int, samples: list[Sample]) -> None:
-    """Store live-capture embeddings for one student, replacing any earlier capture."""
+def save_capture_samples(
+    session: Session, student_id: int, samples: list[Sample], prefix: str = CAPTURE_PREFIX
+) -> None:
+    """Store capture embeddings for one student, replacing any earlier ones with the same prefix.
+
+    Desktop capture uses the default ``capture:`` prefix; web enrollment uses ``web:`` so the
+    two sources are tracked separately while both remain available to the matcher.
+    """
     session.execute(
         delete(FaceEmbedding).where(
             FaceEmbedding.student_id == student_id,
-            FaceEmbedding.source_photo.like(CAPTURE_PREFIX + "%"),
+            FaceEmbedding.source_photo.like(prefix + "%"),
         )
     )
     for sample in samples:
@@ -84,7 +90,7 @@ def save_capture_samples(session: Session, student_id: int, samples: list[Sample
             FaceEmbedding(
                 student_id=student_id,
                 embedding=np.asarray(sample.embedding, dtype=np.float32).tobytes(),
-                source_photo=f"{CAPTURE_PREFIX}{sample.step}:{sample.index}",
+                source_photo=f"{prefix}{sample.step}:{sample.index}",
                 det_score=sample.det_score,
             )
         )

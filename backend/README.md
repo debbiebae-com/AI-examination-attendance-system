@@ -114,6 +114,30 @@ uv run python -m app.register --exam CS101 --list
 
 `--list` prints a table of everyone registered or enrolled, showing their registration, face-sample count, and eligibility — so you can confirm the volunteers are ready before running attendance.
 
+## Web enrollment (phones)
+
+The student-facing web app (`frontend/`, served at `/app`) lets group members enroll from their
+phones: they enter their **name + index number**, then capture 3 photos (look straight, turn left,
+turn right). The backend computes the face embeddings with the same model used for attendance and
+stores them. No desktop capture needed for these volunteers.
+
+```bash
+uv run --extra vision uvicorn app.main:app --host 0.0.0.0 --port 8000
+# open http://localhost:8000/  -> redirects to the enrollment app at /app
+```
+
+- `POST /enroll` accepts `{full_name, student_no, photos:[{step, image(base64)}], exam?}`. Each photo
+  must contain exactly one face; at least one usable photo is required (3 gives the best matching).
+- Set `ENROLL_DEFAULT_EXAM=CS101` to auto-register every web enrollee for the demo exam, or pass
+  `exam` per request. Otherwise register later with `app.register`.
+- `GET /students` now includes a `face_samples` count so you can confirm who has enrolled.
+- Web samples are stored with a `web:` source prefix (desktop capture uses `capture:`); both are
+  used by the matcher.
+- **Model must match attendance.** `ENROLL_MODEL` (default `buffalo_l`) sets the server's model. On a
+  512 MB free host use `buffalo_s`, and run attendance with `--model buffalo_s`.
+- To put it online for phones (HTTPS is required for the camera), see
+  [../docs/DEPLOYMENT.md](../docs/DEPLOYMENT.md).
+
 ## Live attendance (desktop)
 
 This recognises enrolled students in the camera view and records them as present for an exam:
@@ -133,6 +157,8 @@ Options:
 
 - The passive liveness model is **off by default** (unreliable on some cameras). Add `--liveness` to require it; then a face must also pass liveness before being recorded.
 - `--det-size 640` detector resolution. Lower (e.g. 480 or 320) is faster but may miss distant faces.
+- `--model buffalo_l` InsightFace pack. **Must match the enrollment model** — if the web server used
+  `ENROLL_MODEL=buffalo_s`, pass `--model buffalo_s` here.
 - `--threads N` onnxruntime CPU threads.
 - `--threshold` and `--margin` tune matching (see the accuracy test below). `--confirm` sets how many frames a match must hold.
 

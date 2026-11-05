@@ -1,0 +1,105 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+  <meta name="theme-color" content="#0f766e" />
+  <title>Exam Attendance · Face Enrollment</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="stylesheet" href="styles.css" />
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Ctext y='.9em' font-size='90'%3E%F0%9F%8E%93%3C/text%3E%3C/svg%3E" />
+</head>
+<body>
+  <div class="phone">
+    <header class="topbar">
+      <div class="brand">
+        <span class="brand-mark">🎓</span>
+        <div>
+          <h1>Exam Attendance</h1>
+          <p>Face enrollment</p>
+        </div>
+      </div>
+    </header>
+
+    <ol class="steps" id="steps">
+      <li data-step="1" class="active"><span>1</span>Details</li>
+      <li data-step="2"><span>2</span>Face scan</li>
+      <li data-step="3"><span>3</span>Done</li>
+    </ol>
+
+    <main>
+      <!-- STEP 1: details -->
+      <section class="card screen" id="screen-details">
+        <h2>Your details</h2>
+        <p class="muted">Enter your name and index number exactly as they appear on your exam registration.</p>
+
+        <label class="field">
+          <span>Full name</span>
+          <input id="fullName" type="text" autocomplete="name" placeholder="e.g. Deborah Thompson" />
+        </label>
+
+        <label class="field">
+          <span>Index number</span>
+          <input id="studentNo" type="text" autocomplete="off" autocapitalize="characters" spellcheck="false" placeholder="e.g. VOL-001" />
+        </label>
+
+        <label class="consent">
+          <input id="consent" type="checkbox" />
+          <span>I agree to my face being scanned and stored for exam attendance verification.</span>
+        </label>
+
+        <p class="error" id="detailsError" hidden></p>
+        <button class="btn primary" id="toScan">Continue to face scan</button>
+      </section>
+
+      <!-- STEP 2: face scan -->
+      <section class="card screen" id="screen-scan" hidden>
+        <h2>Face scan</h2>
+        <p class="muted" id="scanIntro">We'll take 3 quick photos. Hold your phone at eye level in good light.</p>
+
+        <div class="slots" id="slots">
+          <button class="slot" data-index="0"><span class="slot-num">1</span><span class="slot-label">Straight</span></button>
+          <button class="slot" data-index="1"><span class="slot-num">2</span><span class="slot-label">Left</span></button>
+          <button class="slot" data-index="2"><span class="slot-num">3</span><span class="slot-label">Right</span></button>
+        </div>
+
+        <div class="camera-wrap">
+          <video id="video" autoplay playsinline muted></video>
+          <div class="face-guide"></div>
+          <div class="cam-status" id="camStatus">Starting camera…</div>
+        </div>
+
+        <p class="prompt" id="posePrompt">Look straight at the camera</p>
+
+        <div class="scan-actions">
+          <button class="btn primary" id="captureBtn" disabled>📸 Capture</button>
+        </div>
+
+        <p class="error" id="scanError" hidden></p>
+        <button class="btn primary" id="submitBtn" disabled>Submit enrollment</button>
+        <button class="btn link" id="backToDetails">Back</button>
+      </section>
+
+      <!-- STEP 3: done -->
+      <section class="card screen center" id="screen-done" hidden>
+        <div class="success-badge">✓</div>
+        <h2>You're enrolled!</h2>
+        <p class="muted" id="doneSummary"></p>
+        <div class="receipt" id="receipt"></div>
+        <button class="btn primary" id="enrollAnother">Enroll another person</button>
+      </section>
+
+      <!-- submitting overlay -->
+      <div class="overlay" id="overlay" hidden>
+        <div class="spinner"></div>
+        <p id="overlayText">Saving your face…</p>
+      </div>
+    </main>
+
+    <footer class="foot">Your data is used only for exam attendance verification.</footer>
+  </div>
+
+  <script src="config.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>
