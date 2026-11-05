@@ -62,12 +62,34 @@ the hosting options below (or a tunnel).
 > Render/Koyeb free, enroll **and** run attendance with `buffalo_s`. On your PC or Cloud Run you can
 > use `buffalo_l`.
 
+### Accuracy: the hidden cost of the 512 MB free tier
+
+`buffalo_s` isn't just "a bit lighter" — InsightFace's own published benchmarks show a real accuracy
+drop, and it is **largest on African faces**, which matters for a group in Ghana:
+
+| Benchmark (InsightFace model zoo) | `buffalo_l` | `buffalo_s` |
+| --- | --- | --- |
+| LFW (easy, frontal) | 99.83 | 99.70 |
+| AgeDB-30 (age variation) | 98.23 | 96.58 |
+| IJB-C E4 (hard, varied) | 97.25 | 95.02 |
+| MR-ALL (all) | 91.25 | 71.87 |
+| **MR-ALL (African subset)** | **90.29** | **69.45** |
+
+On clean, frontal, well-lit shots the two are close (LFW). But on varied conditions — and especially
+African faces — `buffalo_s` is substantially weaker. Source:
+<https://github.com/deepinsight/insightface/tree/master/model_zoo>. If recognising your group reliably
+in front of the class is the priority, prefer `buffalo_l`.
+
 ### Recommended for a class demo
 
-- **Want it fully online with zero cost and no PC left on?** → **Render free + Supabase**, using
-  `buffalo_s`. Follow "Path A" below.
-- **Want the best accuracy and reliability, and don't mind leaving your PC on?** → **Your PC +
-  Cloudflare Tunnel**, using `buffalo_l`. Follow "Path B". This avoids all RAM/sleep limits.
+- **Best accuracy + reliability (recommended for your group):** **Your PC + a tunnel** (Path B) with
+  `buffalo_l`. No RAM limits, no cold starts, full-accuracy model. Trade-off: your PC stays on while
+  people enroll. Use ngrok's free static domain so the link doesn't change between runs.
+- **Fully online, $0, no card, PC can be off:** **Render free + Supabase** (Path A) with `buffalo_s`.
+  Accept the accuracy drop above; reasonable only if the demo is controlled (good light, frontal,
+  cooperative subjects).
+- **Fully online + full accuracy (if you have a card):** **Google Cloud Run** (≥1 GB RAM) + Supabase
+  with `buffalo_l`. The always-free quota covers a small demo; needs a Google Cloud billing account.
 
 ---
 
@@ -154,15 +176,29 @@ No RAM limits, no cold starts. Your PC must stay on while people enroll.
 
    (Omit the `DATABASE_URL` line and the `--extra postgres` to use local SQLite instead.)
 
-2. Install Cloudflare's tunnel tool (`cloudflared`) and run a quick tunnel:
+2. Expose it to phones over a free HTTPS tunnel. Pick one:
+
+   **Option 1 — ngrok (recommended: a stable link).** Create a free account at <https://ngrok.com>,
+   claim your one free static domain (Dashboard → Domains), then:
+
+   ```powershell
+   winget install --id Ngrok.Ngrok
+   ngrok config add-authtoken <your-token>
+   ngrok http --domain=<your-name>.ngrok-free.app 8000
+   ```
+
+   The URL `https://<your-name>.ngrok-free.app` stays the same every time you run it, so you can
+   share it with the group once. (Free ngrok shows a brief "visit site" interstitial to visitors.)
+
+   **Option 2 — Cloudflare quick tunnel (no account, but the link changes each run):**
 
    ```powershell
    winget install --id Cloudflare.cloudflared
    cloudflared tunnel --url http://localhost:8000
    ```
 
-   It prints a URL like `https://<random>.trycloudflare.com`. That is an HTTPS address phones can
-   open. Share it; it forwards to your PC's app at `/app`.
+   It prints a random `https://<random>.trycloudflare.com` URL. Fine for a one-off; re-share it if
+   you restart. A *named* Cloudflare tunnel gives a stable URL but needs your own domain.
 
 3. Run attendance on the same PC (same database, same `buffalo_l` model — the default):
 
@@ -170,8 +206,8 @@ No RAM limits, no cold starts. Your PC must stay on while people enroll.
    uv run --extra vision python -m app.vision.attend --exam CS101
    ```
 
-> Quick-tunnel URLs are temporary and change each run — fine for a demo. For a stable URL, create a
-> named tunnel in the Cloudflare dashboard (still free). `ngrok http 8000` is an alternative.
+> Keep the PC awake while people enroll (Windows: Settings → System → Power & sleep → set Screen and
+> Sleep to a long timeout or Never when plugged in). The tunnel and the app must both stay running.
 
 ---
 
