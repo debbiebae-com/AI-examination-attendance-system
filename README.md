@@ -30,4 +30,4 @@ loss, $0.
 ## Licensing note
 
 InsightFace's pretrained weights are restricted to non-commercial research under their current terms. This project is intended for academic demonstration subject to those terms.
-
+small change
