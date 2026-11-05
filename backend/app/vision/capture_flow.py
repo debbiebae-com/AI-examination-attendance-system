@@ -1,9 +1,19 @@
 """Guided face capture: prompts (look straight, turn left, turn right, blink) that keep only good frames.
 
 This is pure logic with no camera or model dependency, so it is unit tested. capture.py drives it.
+
+Conventions
+-----------
+* ``yaw`` is in PERSON space: positive means the person has turned towards their OWN left.
+  The camera driver converts the model's image-space yaw into person space (a mirrored
+  preview flips the sign), so this module never has to guess the camera's orientation.
+* Acceptance is based on pose and image quality only. The heavy face embedding and the
+  passive liveness check run on the few kept frames, not on every camera frame, and the
+  liveness verdict is aggregated over the whole capture (see ``liveness_summary``).
 """
 
-from dataclasses import dataclass
+from collections import Counter
+from dataclasses import dataclass, field
 
 import numpy as np
 
@@ -12,17 +22,37 @@ PROMPTS = {
     "straight": "Look straight at the camera",
     "left": "Slowly turn your head to your LEFT",
     "right": "Slowly turn your head to your RIGHT",
-    "blink": "Blink once",
+    "blink": "Blink once, then open your eyes",
 }
 
-# Starting values. Tune them on your PC: the capture window shows live yaw and eye values.
-STRAIGHT_MAX_DEG = 12.0  # |yaw| below this counts as facing the camera
-TURN_MIN_DEG = 20.0  # turned at least this far counts as a turn
-EYE_OPEN = 0.24  # eye aspect ratio above this is open
-EYE_CLOSED = 0.19  # eye aspect ratio below this is closed
-MIN_DET_SCORE = 0.6
+# Pose windows (degrees, person space). Generous on purpose: the challenge-response
+# itself is the liveness proof, so we do not need extreme angles.
+STRAIGHT_MAX_DEG = 15.0  # |yaw| below this counts as facing the camera
+TURN_MIN_DEG = 18.0  # turned at least this far counts as a turn
+WRONG_WAY_DEG = 8.0  # turned the other way past this -> explicit correction message
+MIN_DET_SCORE = 0.5
+
+# Normalised face-box guidance. Keeps the face large and central enough that the
+# liveness crop is not rejected for missing image area around the face.
+MIN_FACE_W = 0.16
+MAX_FACE_W = 0.62
+FACE_CX_RANGE = (0.28, 0.72)
+FACE_CY_RANGE = (0.22, 0.78)
+
 DEFAULT_SAMPLES = 3  # frames kept for each turn or straight step
-DEFAULT_GAP_FRAMES = 5  # minimum frames between kept samples, so one pose is not stored many times
+DEFAULT_GAP_FRAMES = 6  # minimum frames between kept samples, so one pose is not stored many times
+YAW_EMA_ALPHA = 0.4  # smoothing for the head angle, so a single noisy frame does not stall a step
+
+# Blink detection is calibrated per person from their own open-eye baseline measured
+# during the "straight" step. People differ a lot (glasses, eye shape, camera angle),
+# so fixed thresholds made many volunteers retry. These ratios adapt automatically.
+BLINK_CLOSED_RATIO = 0.6  # closed threshold = baseline * this
+BLINK_OPEN_RATIO = 0.8  # re-open threshold = baseline * this
+EYE_CLOSED_FALLBACK = 0.19  # used until a baseline is available
+EYE_OPEN_FALLBACK = 0.24
+EYE_FLOOR = 0.05  # absolute "fully closed" floor, person-independent
+MIN_CALIB_SAMPLES = 3
+MAX_CALIB_SAMPLES = 90
 
 
 def eye_aspect_ratio(eye: np.ndarray) -> float:
@@ -44,14 +74,33 @@ def mean_eye_ratio(landmarks_68: np.ndarray) -> float:
 
 @dataclass(frozen=True)
 class FrameSignal:
-    """What the camera pipeline reports about one frame."""
+    """What the camera pipeline reports about one frame, already in person space."""
 
     face_count: int
     det_score: float = 0.0
-    is_live: bool | None = None  # None when liveness is not checked
-    yaw: float | None = None  # degrees; sign depends on the camera (see left_sign)
+    yaw: float | None = None  # degrees; positive = turned towards the person's own left
     eye_ratio: float | None = None
-    embedding: np.ndarray | None = None
+    # Normalised face box (centre x, centre y, width), each 0..1. Optional quality guidance.
+    face_cx: float | None = None
+    face_cy: float | None = None
+    face_w: float | None = None
+
+
+@dataclass(frozen=True)
+class Verdict:
+    """Result of processing one frame."""
+
+    message: str = ""  # guidance for the user; empty when the frame is good
+    accepted: str | None = None  # step name when this frame should be kept and embedded
+
+
+@dataclass(frozen=True)
+class AcceptedFrame:
+    """A frame the sequence accepted. The driver embeds it and joins the result back by (step, index)."""
+
+    step: str
+    index: int
+    det_score: float
 
 
 @dataclass(frozen=True)
@@ -62,41 +111,56 @@ class Sample:
     det_score: float
 
 
-def _frame_problem(frame: FrameSignal) -> str:
-    if frame.face_count == 0:
-        return "No face found"
-    if frame.face_count > 1:
-        return "Only one person should be in view"
-    if frame.is_live is False:
-        return "Face not recognised as live. Use your real face, not a photo or screen"
-    if frame.det_score < MIN_DET_SCORE:
-        return "Face not clear enough. Improve the light and move closer"
-    if frame.embedding is None:
-        return "Could not read the face. Try again"
+def _box_problem(signal: FrameSignal) -> str:
+    if signal.face_w is not None:
+        if signal.face_w < MIN_FACE_W:
+            return "Move a little closer to the camera"
+        if signal.face_w > MAX_FACE_W:
+            return "Move back a little"
+    if signal.face_cx is not None and not FACE_CX_RANGE[0] <= signal.face_cx <= FACE_CX_RANGE[1]:
+        return "Center your face in the frame"
+    if signal.face_cy is not None and not FACE_CY_RANGE[0] <= signal.face_cy <= FACE_CY_RANGE[1]:
+        return "Center your face in the frame"
     return ""
 
 
+def _frame_problem(signal: FrameSignal) -> str:
+    if signal.face_count == 0:
+        return "No face found. Look at the camera"
+    if signal.face_count > 1:
+        return "Only one person should be in view"
+    if signal.det_score < MIN_DET_SCORE:
+        return "Face not clear enough. Improve the light"
+    return _box_problem(signal)
+
+
 class CaptureSequence:
-    """Walks one person through the prompts and collects embeddings for each step."""
+    """Walks one person through the prompts and decides which frames to keep.
+
+    Yaw arrives in person space (positive = the person's own left), so there is no
+    camera-sign flag to get wrong. Head angle is smoothed, and the blink thresholds
+    are calibrated from the person's own open-eye baseline.
+    """
 
     def __init__(
         self,
         *,
-        left_sign: int = 1,
         samples_per_step: int = DEFAULT_SAMPLES,
         gap_frames: int = DEFAULT_GAP_FRAMES,
     ):
-        if left_sign not in (1, -1):
-            raise ValueError("left_sign must be 1 or -1")
-        self.left_sign = left_sign
+        if samples_per_step < 1:
+            raise ValueError("samples_per_step must be at least 1")
         self.gap_frames = gap_frames
         self.needed = {step: samples_per_step for step in STEPS}
         self.needed["blink"] = 1
-        self.samples: list[Sample] = []
+        self.accepted_frames: list[AcceptedFrame] = []
         self._step_index = 0
         self._counts = {step: 0 for step in STEPS}
         self._frames_since_keep = gap_frames
         self._blink_closed_seen = False
+        self._yaw_ema: float | None = None
+        self._calib: list[float] = []
+        self.eye_baseline: float | None = None
 
     @property
     def current_step(self) -> str | None:
@@ -106,56 +170,126 @@ class CaptureSequence:
     def done(self) -> bool:
         return self.current_step is None
 
+    @property
+    def smoothed_yaw(self) -> float | None:
+        return self._yaw_ema
+
     def progress(self, step: str) -> tuple[int, int]:
         return self._counts[step], self.needed[step]
 
-    def process(self, frame: FrameSignal) -> str:
-        """Process one frame. Returns guidance for the user, or '' when the frame was accepted."""
+    # -- blink calibration -------------------------------------------------
+
+    def _blink_thresholds(self) -> tuple[float, float]:
+        if self.eye_baseline is None:
+            return EYE_CLOSED_FALLBACK, EYE_OPEN_FALLBACK
+        closed = max(0.08, min(0.24, self.eye_baseline * BLINK_CLOSED_RATIO))
+        open_ = max(closed + 0.04, min(0.32, self.eye_baseline * BLINK_OPEN_RATIO))
+        return closed, open_
+
+    def _maybe_calibrate(self, signal: FrameSignal, yaw: float) -> None:
+        if self.current_step != "straight" or signal.eye_ratio is None:
+            return
+        # Collect any frontal, not-fully-closed frame. Using the absolute floor (not the
+        # fallback closed threshold) lets small-eyed people calibrate too.
+        if abs(yaw) > STRAIGHT_MAX_DEG or signal.eye_ratio <= EYE_FLOOR:
+            return
+        if len(self._calib) < MAX_CALIB_SAMPLES:
+            self._calib.append(signal.eye_ratio)
+        if len(self._calib) >= MIN_CALIB_SAMPLES:
+            self.eye_baseline = float(np.median(self._calib))
+
+    # -- main loop ---------------------------------------------------------
+
+    def process(self, signal: FrameSignal) -> Verdict:
+        """Process one frame. Returns guidance and, when a frame is kept, the step it belongs to."""
         step = self.current_step
         if step is None:
-            return "Capture complete"
+            return Verdict("Capture complete")
         self._frames_since_keep += 1
 
-        problem = _frame_problem(frame)
+        problem = _frame_problem(signal)
         if problem:
-            return problem
+            return Verdict(problem)
+
+        if signal.yaw is not None:
+            self._yaw_ema = (
+                signal.yaw if self._yaw_ema is None else YAW_EMA_ALPHA * signal.yaw + (1 - YAW_EMA_ALPHA) * self._yaw_ema
+            )
+        yaw = self._yaw_ema
+        self._maybe_calibrate(signal, yaw if yaw is not None else 0.0)
 
         if step == "blink":
-            return self._process_blink(frame)
+            return self._process_blink(signal, yaw)
 
-        if frame.yaw is None:
-            return "Head angle not available"
-        turned = self.left_sign * frame.yaw  # positive means the person's head is turned to their left
+        if yaw is None:
+            return Verdict("Head angle not available. Improve the light")
 
-        if step == "straight" and abs(frame.yaw) > STRAIGHT_MAX_DEG:
-            return "Face the camera directly"
-        if step == "left" and turned < TURN_MIN_DEG:
-            return "Turn a little further to your left"
-        if step == "right" and turned > -TURN_MIN_DEG:
-            return "Turn a little further to your right"
+        if step == "straight":
+            if abs(yaw) > STRAIGHT_MAX_DEG:
+                return Verdict("Face the camera directly")
+            if signal.eye_ratio is not None and signal.eye_ratio < EYE_FLOOR:
+                return Verdict("Open your eyes")
+        elif step == "left":
+            if yaw < -WRONG_WAY_DEG:
+                return Verdict("That's your RIGHT. Turn to your LEFT")
+            if yaw < TURN_MIN_DEG:
+                return Verdict("Turn a little further to your left")
+        elif step == "right":
+            if yaw > WRONG_WAY_DEG:
+                return Verdict("That's your LEFT. Turn to your RIGHT")
+            if yaw > -TURN_MIN_DEG:
+                return Verdict("Turn a little further to your right")
 
         if self._frames_since_keep < self.gap_frames:
-            return ""
-        self._keep(step, frame)
-        return ""
+            return Verdict("")
+        return Verdict("", accepted=self._keep(step, signal))
 
-    def _process_blink(self, frame: FrameSignal) -> str:
-        if frame.eye_ratio is None:
-            return "Eyes not visible"
+    def _process_blink(self, signal: FrameSignal, yaw: float | None) -> Verdict:
+        if signal.eye_ratio is None:
+            return Verdict("Eyes not visible. Improve the light")
+        closed, open_ = self._blink_thresholds()
         if not self._blink_closed_seen:
-            if frame.eye_ratio <= EYE_CLOSED:
+            if signal.eye_ratio <= closed:
                 self._blink_closed_seen = True
-                return "Now open your eyes"
-            return PROMPTS["blink"]
-        if frame.eye_ratio >= EYE_OPEN:
-            self._keep("blink", frame)
-            return ""
-        return "Open your eyes"
+                return Verdict("Now open your eyes")
+            return Verdict(PROMPTS["blink"])
+        if signal.eye_ratio >= open_:
+            if yaw is not None and abs(yaw) > STRAIGHT_MAX_DEG:
+                return Verdict("Face the camera and open your eyes")
+            return Verdict("", accepted=self._keep("blink", signal))
+        return Verdict("Open your eyes")
 
-    def _keep(self, step: str, frame: FrameSignal) -> None:
-        self.samples.append(Sample(step, self._counts[step], frame.embedding, frame.det_score))
+    def _keep(self, step: str, signal: FrameSignal) -> str:
+        index = self._counts[step]
+        self.accepted_frames.append(AcceptedFrame(step, index, signal.det_score))
         self._counts[step] += 1
         self._frames_since_keep = 0
         if self._counts[step] >= self.needed[step]:
             self._step_index += 1
             self._blink_closed_seen = False
+        return step
+
+
+# -- finishing helpers (pure, unit tested) ---------------------------------
+
+
+def liveness_summary(flags: list[bool | None]) -> tuple[bool, str]:
+    """Aggregate the passive liveness votes over the kept frames.
+
+    The challenge-response (turn + blink) is the active liveness proof; the passive
+    model is noisy frame to frame, so a clear majority of live votes passes the
+    capture instead of requiring every single frame to be live.
+    """
+    scored = [flag for flag in flags if flag is not None]
+    if not scored:
+        return False, "Liveness could not be checked. Keep your face fully in view and try again"
+    live = sum(1 for flag in scored if flag)
+    if live / len(scored) >= 0.6:
+        return True, ""
+    return False, "Face not recognised as live. Use your real face, not a photo or screen"
+
+
+def missing_steps(samples: list[Sample]) -> list[str]:
+    """Steps that ended up with no usable sample (e.g. an embedding failed)."""
+    counts = Counter(sample.step for sample in samples)
+    return [step for step in STEPS if counts.get(step, 0) == 0]
