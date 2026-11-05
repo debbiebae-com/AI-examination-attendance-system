@@ -4,6 +4,10 @@ This guide gets the **student-facing enrollment page** online so group members c
 their phones, type their name + index number, and do a face scan. It also covers connecting the
 live attendance demo to the same data.
 
+> **⭐ Recommended: the hybrid "Supabase inbox".** Members upload anytime (even with your PC off);
+> your PC syncs and runs the full-accuracy model when you're online. No cloud RAM limits, no
+> accuracy loss. See **[HYBRID_SYNC.md](HYBRID_SYNC.md)**. Paths A and B below are the alternatives.
+
 ## How it fits together
 
 ```
@@ -82,7 +86,10 @@ in front of the class is the priority, prefer `buffalo_l`.
 
 ### Recommended for a class demo
 
-- **Best accuracy + reliability (recommended for your group):** **Your PC + a tunnel** (Path B) with
+- **⭐ Best overall — the hybrid "Supabase inbox":** members upload anytime (PC can be off), your PC
+  syncs and runs full-accuracy `buffalo_l` when online. No cloud RAM limits, no accuracy loss, $0.
+  See **[HYBRID_SYNC.md](HYBRID_SYNC.md)**.
+- **Best accuracy + reliability, simplest hosting:** **Your PC + a tunnel** (Path B) with
   `buffalo_l`. No RAM limits, no cold starts, full-accuracy model. Trade-off: your PC stays on while
   people enroll. Use ngrok's free static domain so the link doesn't change between runs.
 - **Fully online, $0, no card, PC can be off:** **Render free + Supabase** (Path A) with `buffalo_s`.

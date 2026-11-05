@@ -22,7 +22,7 @@ const els = {};
   "steps", "screen-details", "screen-scan", "screen-done",
   "fullName", "studentNo", "consent", "detailsError", "toScan",
   "slots", "video", "camStatus", "posePrompt", "captureBtn",
-  "submitBtn", "scanError", "backToDetails", "doneSummary", "receipt",
+  "submitBtn", "scanError", "backToDetails", "doneTitle", "doneSummary", "receipt",
   "enrollAnother", "overlay", "overlayText", "scanIntro",
 ].forEach((id) => (els[id] = document.getElementById(id)));
 
@@ -168,47 +168,93 @@ function hideOverlay() {
   els.overlay.hidden = true;
 }
 
-els.submitBtn.addEventListener("click", async () => {
-  showError(els.scanError, "");
-  showOverlay("Saving your face…");
-  const payload = {
+function inboxMode() {
+  return Boolean(CONFIG.SUPABASE_URL && CONFIG.SUPABASE_ANON_KEY);
+}
+
+// Hybrid inbox: store the submission in Supabase (no face model in the cloud). The organizer's
+// PC syncs and embeds it later. Uses the public anon key, which RLS restricts to insert-only.
+async function submitToInbox(photos) {
+  const res = await fetch(`${CONFIG.SUPABASE_URL}/rest/v1/enroll_submissions`, {
+    method: "POST",
+    headers: {
+      apikey: CONFIG.SUPABASE_ANON_KEY,
+      Authorization: `Bearer ${CONFIG.SUPABASE_ANON_KEY}`,
+      "Content-Type": "application/json",
+      Prefer: "return=minimal",
+    },
+    body: JSON.stringify({
+      student_no: state.studentNo,
+      full_name: state.fullName,
+      exam: CONFIG.EXAM || null,
+      photos,
+    }),
+  });
+  if (!res.ok) {
+    const text = await res.text().catch(() => "");
+    throw new Error(`Submission failed (${res.status}). ${text}`.trim());
+  }
+  return {
     full_name: state.fullName,
     student_no: state.studentNo,
-    photos: state.photos.map((image, i) => ({ step: POSES[i].key, image })),
+    samples_saved: photos.length,
+    registered_exam: CONFIG.EXAM || null,
+    queued: true,
   };
-  if (CONFIG.EXAM) payload.exam = CONFIG.EXAM;
+}
 
+// Direct: the running FastAPI backend computes the embeddings immediately.
+async function submitDirect(photos) {
+  const payload = { full_name: state.fullName, student_no: state.studentNo, photos };
+  if (CONFIG.EXAM) payload.exam = CONFIG.EXAM;
+  const res = await fetch(`${CONFIG.API_BASE}/enroll`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(payload),
+  });
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) {
+    const detail = data.detail;
+    const problems = detail && detail.problems ? detail.problems : typeof detail === "string" ? [detail] : null;
+    throw new Error(problems ? problems.join(" ") : `Enrollment failed (${res.status}).`);
+  }
+  return data;
+}
+
+els.submitBtn.addEventListener("click", async () => {
+  showError(els.scanError, "");
+  const inbox = inboxMode();
+  showOverlay(inbox ? "Submitting your details…" : "Saving your face…");
+  const photos = state.photos.map((image, i) => ({ step: POSES[i].key, image }));
   try {
-    const res = await fetch(`${CONFIG.API_BASE}/enroll`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(payload),
-    });
-    const data = await res.json().catch(() => ({}));
-    if (!res.ok) {
-      const detail = data.detail;
-      const problems = detail && detail.problems ? detail.problems : typeof detail === "string" ? [detail] : null;
-      throw new Error(problems ? problems.join(" ") : `Enrollment failed (${res.status}).`);
-    }
+    const data = inbox ? await submitToInbox(photos) : await submitDirect(photos);
     hideOverlay();
     stopCamera();
-    showDone(data);
+    showDone(data, inbox);
   } catch (err) {
     hideOverlay();
-    showError(els.scanError, err.message || "Could not reach the server. Check your connection and try again.");
+    showError(els.scanError, err.message || "Could not submit. Check your connection and try again.");
   }
 });
 
 // ---- step 3: done --------------------------------------------------------
 
-function showDone(data) {
-  els.doneSummary.textContent = `${data.full_name} is now registered for face attendance.`;
+function showDone(data, inbox) {
+  if (inbox) {
+    els.doneTitle.textContent = "Submitted!";
+    els.doneSummary.textContent =
+      "Your details and photos are safely saved. They'll be activated once the organizer syncs — usually before the demo.";
+  } else {
+    els.doneTitle.textContent = "You're enrolled!";
+    els.doneSummary.textContent = `${data.full_name} is now registered for face attendance.`;
+  }
   const rows = [
     ["Name", data.full_name],
     ["Index number", data.student_no],
-    ["Face samples", String(data.samples_saved)],
+    ["Photos", String(data.samples_saved)],
+    ["Status", inbox ? "Queued for sync" : "Enrolled"],
   ];
-  if (data.registered_exam) rows.push(["Registered for", data.registered_exam]);
+  if (data.registered_exam) rows.push(["Exam", data.registered_exam]);
   els.receipt.innerHTML = rows
     .map(([k, v]) => `<div><span>${k}</span><span>${escapeHtml(v)}</span></div>`)
     .join("");

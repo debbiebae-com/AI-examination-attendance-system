@@ -138,6 +138,21 @@ uv run --extra vision uvicorn app.main:app --host 0.0.0.0 --port 8000
 - To put it online for phones (HTTPS is required for the camera), see
   [../docs/DEPLOYMENT.md](../docs/DEPLOYMENT.md).
 
+### Hybrid sync (members upload anytime, PC embeds when online)
+
+Instead of running the model in the cloud, the web app can store submissions in a Supabase "inbox"
+(name + index + raw photos). Members submit even when your PC is off; you sync later and compute the
+full-accuracy embeddings locally:
+
+```bash
+# on your PC, with SUPABASE_URL and SUPABASE_SERVICE_KEY set
+uv run --extra vision python -m app.sync            # pull pending, embed, save, mark synced
+uv run --extra vision python -m app.sync --dry-run  # just list what's pending
+```
+
+Sync wipes the cloud photos after processing (privacy) and is safe to re-run. Setup walkthrough:
+[../docs/HYBRID_SYNC.md](../docs/HYBRID_SYNC.md).
+
 ## Live attendance (desktop)
 
 This recognises enrolled students in the camera view and records them as present for an exam:

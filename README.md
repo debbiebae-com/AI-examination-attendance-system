@@ -18,8 +18,12 @@ do a 3-pose face scan; the backend computes the embeddings with the same model u
 ## Enrollment web app
 
 Run the backend and open `http://localhost:8000/` (redirects to `/app`). To put it online for phones,
-see [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md) — it covers free hosting (Render/Koyeb + Supabase, or a
-Cloudflare tunnel from your PC) and the model/RAM trade-offs.
+see [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md).
+
+**Recommended: the hybrid "Supabase inbox"** ([docs/HYBRID_SYNC.md](docs/HYBRID_SYNC.md)) — group
+members upload their name + index number + face photos anytime (even with your PC off), and your PC
+syncs and computes the full-accuracy embeddings when you're online. No cloud RAM limits, no accuracy
+loss, $0.
 
 ## Licensing note
 
