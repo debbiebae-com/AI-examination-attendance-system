@@ -91,6 +91,22 @@ Tuning, shown on screen while the window runs:
 
 Liveness uses InsightFace's optional add-on model (`liveness.onnx`, about 1.5 MB). The first run downloads it to `~/.insightface/addons`. The model's license is the same non-commercial research terms as `buffalo_l`.
 
+## Live attendance (desktop)
+
+This recognises enrolled students in the camera view and records them as present for an exam:
+
+```bash
+uv run --extra vision python -m app.vision.attend --exam CS101
+```
+
+- Each face must match the same student for 3 frames in a row, and pass the liveness check, before attendance is recorded.
+- Several students can be recognised at once. Each face is tracked from frame to frame.
+- Students who aren't registered for the exam are shown in red and not recorded.
+- Students already marked for the exam show as "already marked". The database blocks duplicates.
+- Press `q` to stop.
+
+The matching threshold and margin can be changed with `--threshold` and `--margin`. Use the accuracy test to choose them.
+
 ## Accuracy test on real photos
 
 The demo photos are AI-generated and can't show how well matching separates people. Use real photos from consenting volunteers instead. Keep them on your PC: they're biometric data and `backend/data/probes/` is excluded from Git.
