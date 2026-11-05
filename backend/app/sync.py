@@ -9,9 +9,9 @@ Hybrid architecture:
   * Attendance then runs fully offline from the local database.
 
 Usage (from backend/), with SUPABASE_URL and SUPABASE_SERVICE_KEY set:
-    uv run --extra vision python -m app.sync                 # process all pending
-    uv run --extra vision python -m app.sync --dry-run       # just list what's pending
-    uv run --extra vision python -m app.sync --keep-photos   # don't wipe cloud photos after sync
+    uv run --frozen --extra vision python -m app.sync                 # process all pending
+    uv run --frozen --extra vision python -m app.sync --dry-run       # just list what's pending
+    uv run --frozen --extra vision python -m app.sync --keep-photos   # keep cloud photos after sync
 
 The service-role key is secret and stays on this PC. The browser only ever uses the public
 anon key, which Row-Level Security restricts to insert-only.

@@ -149,8 +149,8 @@ full-accuracy embeddings locally:
 
 ```bash
 # on your PC, with SUPABASE_URL and SUPABASE_SERVICE_KEY set
-uv run --extra vision python -m app.sync            # pull pending, embed, save, mark synced
-uv run --extra vision python -m app.sync --dry-run  # just list what's pending
+uv run --frozen --extra vision python -m app.sync            # pull pending, embed, save, mark synced
+uv run --frozen --extra vision python -m app.sync --dry-run  # just list what's pending
 ```
 
 Sync wipes the cloud photos after processing (privacy) and is safe to re-run. Setup walkthrough:

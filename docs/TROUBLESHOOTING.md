@@ -44,6 +44,45 @@ Then open a **new** PowerShell and try `uv --version` again.
 
 ---
 
+## `uv` times out fetching `psycopg` or another package
+
+This happens **before your Python command runs**. It is a package-download/connection problem,
+not a face-recognition or Supabase-sync error. Do not reinstall uv when `uv --version` works.
+
+The local hybrid sync uses Supabase's HTTPS API and SQLite; it does **not** need the Postgres
+driver. Previously, the committed lock omitted the optional Postgres extra, causing uv to resolve
+its metadata again. Pull the updated lock before retrying.
+
+**If your environment already worked before**, run these from `backend/` to skip package syncing:
+
+```powershell
+git pull
+uv run --frozen --no-sync python -m app.sync --dry-run
+```
+
+`--no-sync` uses the existing environment without downloading packages. `--dry-run` only lists
+pending submissions; it does not enroll anyone or change cloud data. Once configured, remove
+`--dry-run` to sync. If Python reports a missing module, the existing environment is incomplete:
+use the one-time setup below instead of `--no-sync`.
+
+For normal subsequent runs, use the committed lock rather than resolving dependencies again:
+
+```powershell
+uv run --frozen --extra vision python -m app.sync
+```
+
+**Only for a fresh/incomplete environment or a slow connection**, allow more time per request:
+
+```powershell
+$env:UV_HTTP_TIMEOUT = "120"
+uv sync --frozen --extra vision
+```
+
+The first setup still needs a working connection to the package host. If it times out even with
+the longer timeout, try another reliable network or phone hotspot. Do not disable TLS certificate
+verification or install from an untrusted mirror. The timeout setting lasts for this PowerShell
+window only.
+
 ## Run project commands from the `backend` folder
 
 `app.sync`, `app.seed`, `app.register`, and `uvicorn` must be run from `backend/`:

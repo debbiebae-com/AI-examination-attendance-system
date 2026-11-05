@@ -94,17 +94,22 @@ From `backend/`, in PowerShell:
 ```powershell
 $env:SUPABASE_URL = "https://abcdefgh.supabase.co"
 $env:SUPABASE_SERVICE_KEY = "eyJ...the service_role key..."
-uv run --extra vision python -m app.sync
+uv run --frozen --extra vision python -m app.sync
 ```
 
 This pulls every pending submission, computes the embeddings with `buffalo_l`, saves them to your
 local database, marks each one synced, and **wipes the cloud photos** (privacy). Useful flags:
 
 ```powershell
-uv run --extra vision python -m app.sync --dry-run        # just list what's pending
-uv run --extra vision python -m app.sync --keep-photos    # don't wipe cloud photos
-uv run --extra vision python -m app.sync --exam CS101     # fallback exam if not set per-submission
+uv run --frozen --extra vision python -m app.sync --dry-run        # just list what's pending
+uv run --frozen --extra vision python -m app.sync --keep-photos    # don't wipe cloud photos
+uv run --frozen --extra vision python -m app.sync --exam CS101     # fallback exam if not set per-submission
 ```
+
+`--frozen` uses the committed dependency lock. If your environment already works and you want to
+skip package preparation entirely, add `--no-sync`. For package-download timeouts or a fresh
+environment, see [TROUBLESHOOTING.md](TROUBLESHOOTING.md); the hybrid does not need the optional
+Postgres driver.
 
 > Use your **local** database for the hybrid (the default SQLite). Don't point `DATABASE_URL` at
 > Supabase here — the point is that attendance works offline from your PC afterwards.
@@ -112,7 +117,7 @@ uv run --extra vision python -m app.sync --exam CS101     # fallback exam if not
 ## Step 6 — Run attendance (offline)
 
 ```powershell
-uv run --extra vision python -m app.vision.attend --exam CS101
+uv run --frozen --extra vision python -m app.vision.attend --exam CS101
 ```
 
 Everyone who synced is now enrolled with full-accuracy embeddings. No internet needed.
