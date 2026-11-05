@@ -17,6 +17,9 @@ uv run uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
 - Reseed from scratch: `uv run python -m app.seed --reset`
 - Tests: `uv run pytest`
 
+> If PowerShell says `'uv' is not recognized`, see [../docs/TROUBLESHOOTING.md](../docs/TROUBLESHOOTING.md)
+> — it's a one-minute PATH fix, not a project problem.
+
 ## Simulated data
 
 The demo uses fictional students (`UGS-26-001` to `UGS-26-020`) and two exams on 10 Nov 2026.
