@@ -239,3 +239,26 @@ def missing_steps(samples: list[Sample]) -> list[str]:
     """Steps that ended up with no usable sample (e.g. an embedding failed)."""
     counts = Counter(sample.step for sample in samples)
     return [step for step in STEPS if counts.get(step, 0) == 0]
+
+
+def capture_save_verdict(
+    problems: list[str],
+    absent: list[str],
+    live_flags: list[bool | None],
+    *,
+    liveness_enabled: bool,
+) -> tuple[bool, list[str]]:
+    """Decide whether a finished capture may be saved. Returns (ok, messages).
+
+    Embedding problems and missing pose samples always block a save. The passive
+    liveness verdict only blocks when ``liveness_enabled``; when it is off, the turn
+    challenge is the liveness proof and the passive votes are ignored.
+    """
+    messages = list(problems)
+    if absent:
+        messages.append(f"no usable sample for: {', '.join(absent)}")
+    if liveness_enabled:
+        live_ok, live_message = liveness_summary(live_flags)
+        if not live_ok:
+            messages.append(live_message)
+    return not messages, messages

@@ -12,9 +12,10 @@ Designed for a smooth, low-retry experience:
   liveness check run on a worker thread for the few kept frames, so the preview stays fast.
 * A background camera reader always shows the newest frame (no stale-frame lag), and an
   FPS readout is shown live.
-* Liveness comes from the turn challenge (a photo or screen cannot turn its head) plus
-  the passive liveness model, whose vote is aggregated over the whole capture instead of
-  rejecting single frames. There is no blink step.
+* Liveness comes from the turn challenge (a photo or screen cannot turn its head). The
+  passive liveness model is OPTIONAL and OFF by default because it is unreliable on some
+  cameras; enable it with --liveness, in which case its vote is aggregated over the whole
+  capture instead of rejecting single frames. There is no blink step.
 
 Run from backend/ after installing the vision extra:
 
@@ -26,6 +27,7 @@ Options:
     --no-mirror       for camera feeds that are already mirrored (e.g. some phone apps)
     --det-size 320    guidance detector resolution (lower = faster)
     --threads N       onnxruntime CPU threads
+    --liveness        enable the passive liveness model (off by default)
 
 Press q or Esc in the window to cancel. Press m to flip the mirror if left/right feels
 inverted (useful when a phone-as-webcam app already mirrors its feed).
@@ -47,7 +49,7 @@ from app.vision.capture_flow import (
     TURN_MIN_DEG,
     CaptureSequence,
     FrameSignal,
-    liveness_summary,
+    capture_save_verdict,
     missing_steps,
 )
 from app.vision.embedder import GuidedFace, InsightFaceEmbedder
@@ -247,6 +249,11 @@ def main() -> None:
     parser.add_argument("--no-mirror", action="store_true", help="use if the camera feed is already mirrored")
     parser.add_argument("--det-size", type=int, default=320, help="guidance detector resolution (lower = faster)")
     parser.add_argument("--threads", type=int, default=None, help="onnxruntime CPU threads")
+    parser.add_argument(
+        "--liveness",
+        action="store_true",
+        help="enable the passive liveness model (off by default; the turn challenge is always active)",
+    )
     args = parser.parse_args()
 
     mirrored = not args.no_mirror
@@ -256,8 +263,12 @@ def main() -> None:
         student_id, full_name = student.id, student.full_name
 
     print("Loading InsightFace (the first run downloads the models)...")
+    if args.liveness:
+        print("Passive liveness check: ON")
+    else:
+        print("Passive liveness check: OFF (the left/right turn challenge still proves liveness)")
     embedder = InsightFaceEmbedder(
-        liveness=True, det_size=(args.det_size, args.det_size), threads=args.threads
+        liveness=args.liveness, det_size=(args.det_size, args.det_size), threads=args.threads
     )
 
     camera = cv2.VideoCapture(args.camera)
@@ -337,16 +348,12 @@ def main() -> None:
 
     samples, problems = collect_samples(sequence.accepted_frames, results)
     absent = missing_steps(samples)
-    live_ok, live_message = liveness_summary([r.is_live for r in results if r.embedding is not None])
-
-    if problems or absent or not live_ok:
+    live_flags = [r.is_live for r in results if r.embedding is not None]
+    ok, messages = capture_save_verdict(problems, absent, live_flags, liveness_enabled=args.liveness)
+    if not ok:
         print("Capture was not saved:")
-        for problem in problems:
-            print(f"  - {problem}")
-        if absent:
-            print(f"  - no usable sample for: {', '.join(absent)}")
-        if not live_ok:
-            print(f"  - {live_message}")
+        for message in messages:
+            print(f"  - {message}")
         raise SystemExit(1)
 
     with SessionLocal() as session:

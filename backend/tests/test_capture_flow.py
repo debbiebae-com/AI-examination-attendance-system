@@ -5,6 +5,7 @@ from app.models import FaceEmbedding, Student
 from app.vision.capture_flow import (
     CaptureSequence,
     FrameSignal,
+    capture_save_verdict,
     eye_aspect_ratio,
     liveness_summary,
     mean_eye_ratio,
@@ -197,6 +198,40 @@ def test_liveness_summary_fails_when_nothing_scored():
 def test_missing_steps_reports_absent_poses():
     samples = [sample("straight", 0, 1), sample("left", 0, 2)]
     assert missing_steps(samples) == ["right"]
+
+
+def test_save_verdict_ignores_liveness_when_disabled():
+    # Passive check off: even all-not-live votes must not block the save.
+    ok, messages = capture_save_verdict([], [], [False, False, False], liveness_enabled=False)
+    assert ok and messages == []
+
+
+def test_save_verdict_ignores_unscored_liveness_when_disabled():
+    ok, messages = capture_save_verdict([], [], [None, None], liveness_enabled=False)
+    assert ok and messages == []
+
+
+def test_save_verdict_blocks_when_liveness_enabled_and_not_live():
+    ok, messages = capture_save_verdict([], [], [False, False, True], liveness_enabled=True)
+    assert not ok
+    assert any("not recognised as live" in m for m in messages)
+
+
+def test_save_verdict_passes_when_liveness_enabled_and_live():
+    ok, messages = capture_save_verdict([], [], [True, True, False], liveness_enabled=True)
+    assert ok and messages == []
+
+
+def test_save_verdict_blocks_on_embedding_problems_even_with_liveness_off():
+    ok, messages = capture_save_verdict(["left sample 1: boom"], [], [False], liveness_enabled=False)
+    assert not ok
+    assert "left sample 1: boom" in messages
+
+
+def test_save_verdict_blocks_on_missing_steps_even_with_liveness_off():
+    ok, messages = capture_save_verdict([], ["right"], [True], liveness_enabled=False)
+    assert not ok
+    assert any("right" in m for m in messages)
 
 
 # -- persistence -----------------------------------------------------------

@@ -88,7 +88,7 @@ It is built for a smooth, low-retry experience:
 - **Left/right always match the person.** The preview is mirrored (selfie-style) and head angles are converted to *person space*, so "turn to your LEFT" means the person's own left. On-screen arrows point the right way, a yaw gauge shows the target zone, and turning the wrong way gets an explicit correction ("That's your RIGHT. Turn to your LEFT"). There is no sign flag to get wrong. If left/right ever feels inverted (some phone-as-webcam apps already mirror their feed), press **`m`** in the window to flip the mirror — no restart needed.
 - **Fast preview.** Each camera frame runs only the cheap detector + landmarks. The heavy face embedding and liveness check run on a worker thread for the few kept frames, and a background camera reader always shows the newest frame (no stale-frame lag). A live `fps` readout is shown top-right.
 - **Fewer retries.** The head angle is smoothed and gentle "move closer / back / center" guidance keeps the face usable. There is no blink step.
-- **Liveness is aggregated.** The turn challenge is the active liveness proof (a photo or screen cannot turn its head). The passive liveness model votes on each kept frame, and a clear majority of live votes passes the capture, instead of one noisy frame rejecting it. If the majority is not live, nothing is saved.
+- **Liveness from the turn challenge.** Turning left and right is the active liveness proof — a photo or screen cannot turn its head. The passive liveness model is **optional and off by default**, because it is unreliable on some cameras and lighting and was rejecting real faces. Turn it on with `--liveness`; when on, its vote is aggregated over the kept frames (a clear majority of live votes passes) rather than rejecting single frames.
 
 Options:
 
@@ -97,10 +97,11 @@ Options:
 - `--det-size 320` guidance detector resolution. Lower is faster; raise it if faces are small in the frame.
 - `--threads N` onnxruntime CPU threads, if you want to cap CPU use.
 - `--samples 3` frames kept per straight/turn step.
+- `--liveness` enable the passive liveness model (off by default).
 
 Tuning constants live in `app/vision/capture_flow.py`: `TURN_MIN_DEG` and `STRAIGHT_MAX_DEG` (turn angles).
 
-Liveness uses InsightFace's optional add-on model (`liveness.onnx`, about 1.5 MB). The first run downloads it to `~/.insightface/addons`. The model's license is the same non-commercial research terms as `buffalo_l`.
+When `--liveness` is used, the passive check uses InsightFace's optional add-on model (`liveness.onnx`, about 1.5 MB), downloaded on first use to `~/.insightface/addons`. The model's license is the same non-commercial research terms as `buffalo_l`. Without `--liveness`, the add-on is not loaded at all.
 
 ## Live attendance (desktop)
 
