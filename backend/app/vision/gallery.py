@@ -8,8 +8,11 @@ from sqlalchemy.orm import Session
 
 from app.config import BASE_DIR
 from app.models import FaceEmbedding, Student
+from app.vision.capture_flow import Sample
 from app.vision.embedder import FaceEmbedder
 from app.vision.matcher import DEFAULT_MARGIN, DEFAULT_THRESHOLD, FaceMatcher
+
+CAPTURE_PREFIX = "capture:"
 
 
 @dataclass(frozen=True)
@@ -27,7 +30,8 @@ def enroll_students(session: Session, embedder: FaceEmbedder) -> list[EnrollResu
     A photo is only enrolled if it contains exactly one face. Anything else is
     reported, so the operator can fix the photo.
     """
-    session.execute(delete(FaceEmbedding))
+    # Keep embeddings from live capture (source "capture:..."); only photo-based ones are replaced.
+    session.execute(delete(FaceEmbedding).where(FaceEmbedding.source_photo.not_like(CAPTURE_PREFIX + "%")))
     results: list[EnrollResult] = []
 
     students = session.scalars(
@@ -46,12 +50,13 @@ def enroll_students(session: Session, embedder: FaceEmbedder) -> list[EnrollResu
             results.append(EnrollResult(student.student_no, photo, "unreadable"))
             continue
 
-        if not faces:
+        usable = [f for f in faces if f.embedding is not None]
+        if not usable:
             results.append(EnrollResult(student.student_no, photo, "no_face"))
-        elif len(faces) > 1:
-            results.append(EnrollResult(student.student_no, photo, "multiple_faces", faces_found=len(faces)))
+        elif len(usable) > 1:
+            results.append(EnrollResult(student.student_no, photo, "multiple_faces", faces_found=len(usable)))
         else:
-            face = faces[0]
+            face = usable[0]
             session.add(
                 FaceEmbedding(
                     student_id=student.id,
@@ -64,6 +69,26 @@ def enroll_students(session: Session, embedder: FaceEmbedder) -> list[EnrollResu
 
     session.commit()
     return results
+
+
+def save_capture_samples(session: Session, student_id: int, samples: list[Sample]) -> None:
+    """Store live-capture embeddings for one student, replacing any earlier capture."""
+    session.execute(
+        delete(FaceEmbedding).where(
+            FaceEmbedding.student_id == student_id,
+            FaceEmbedding.source_photo.like(CAPTURE_PREFIX + "%"),
+        )
+    )
+    for sample in samples:
+        session.add(
+            FaceEmbedding(
+                student_id=student_id,
+                embedding=np.asarray(sample.embedding, dtype=np.float32).tobytes(),
+                source_photo=f"{CAPTURE_PREFIX}{sample.step}:{sample.index}",
+                det_score=sample.det_score,
+            )
+        )
+    session.commit()
 
 
 def load_matcher(

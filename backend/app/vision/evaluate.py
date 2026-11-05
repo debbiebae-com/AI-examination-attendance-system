@@ -72,9 +72,10 @@ def _single_embedding(embedder: FaceEmbedder, path: Path) -> tuple[np.ndarray | 
         faces: list[DetectedFace] = embedder.detect(path)
     except ValueError:
         return None, "unreadable"
-    if len(faces) == 1:
-        return faces[0].embedding, ""
-    return None, f"{len(faces)} faces found (need exactly 1)"
+    usable = [f for f in faces if f.embedding is not None]
+    if len(usable) == 1:
+        return usable[0].embedding, ""
+    return None, f"{len(usable)} usable faces found (need exactly 1)"
 
 
 def collect_probes(root: Path) -> list[tuple[str, Path]]:

@@ -70,6 +70,27 @@ Notes on the vision dependencies:
 - The extra uses InsightFace 2.1, which installs from a pre-built wheel. InsightFace 0.7.3 must compile C++ code, which needs Microsoft's C++ Build Tools on Windows.
 - Model weights are for non-commercial research use only (see the project's licensing note).
 
+## Guided capture (desktop, with liveness)
+
+This is the Instagram-style enrollment: a window shows the camera with prompts. It asks the person to look straight, turn left, turn right, and blink. Only frames that match each prompt are kept, and frames from a photo or screen are refused by the liveness check.
+
+```bash
+uv run --extra vision python -m app.vision.capture --student-no VOL-001 --name "Ama Mensah" --exam CS101
+```
+
+- `--name` is needed only when the student number is new. A new student is created as a test volunteer.
+- `--exam` registers the student for an exam, so attendance will accept them.
+- Run it again to replace the student's capture.
+- Press `q` to cancel.
+
+Tuning, shown on screen while the window runs:
+
+- **Turns:** if turning to your left never completes, run again with `--left-sign -1`. Your camera may report yaw with the opposite sign.
+- **Blink:** the eye value is shown as `eyes`. It should drop well below the open value when you blink. The thresholds `EYE_OPEN` and `EYE_CLOSED` in `app/vision/capture_flow.py` may need adjusting.
+- **Turn angles:** `TURN_MIN_DEG` and `STRAIGHT_MAX_DEG` in `app/vision/capture_flow.py`.
+
+Liveness uses InsightFace's optional add-on model (`liveness.onnx`, about 1.5 MB). The first run downloads it to `~/.insightface/addons`. The model's license is the same non-commercial research terms as `buffalo_l`.
+
 ## Accuracy test on real photos
 
 The demo photos are AI-generated and can't show how well matching separates people. Use real photos from consenting volunteers instead. Keep them on your PC: they're biometric data and `backend/data/probes/` is excluded from Git.
