@@ -12,8 +12,9 @@ An AI-powered examination attendance system that uses real-time facial recogniti
 ## Status
 
 The data layer, REST API, guided face capture, live attendance and **phone-based web enrollment**
-are in place. Group members open the web app on their phones, enter their name + index number, and
-do a 3-pose face scan; the backend computes the embeddings with the same model used for attendance.
+are in place. Group members open the web app on their phones, enter their name + index number
+(e.g. `PS/CSC/24/0016`), and follow a live guided capture that collects frames automatically;
+the backend computes the embeddings with the same model used for attendance.
 
 ## Enrollment web app
 

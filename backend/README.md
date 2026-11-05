@@ -117,11 +117,30 @@ uv run python -m app.register --exam CS101 --list
 
 `--list` prints a table of everyone registered or enrolled, showing their registration, face-sample count, and eligibility — so you can confirm the volunteers are ready before running attendance.
 
+## Clearing people (keep only your volunteers)
+
+`app.cleanup` removes everyone from the local database except the people you name, including their
+face embeddings, exam registrations and attendance records. Exams themselves are kept. It matches
+index numbers or full names case-insensitively, so long indices like `PS/CSC/24/0016` work.
+
+```bash
+uv run --frozen python -m app.cleanup --list                 # see who is currently stored
+uv run --frozen python -m app.cleanup --keep VOL-002         # dry run: shows what would change
+uv run --frozen python -m app.cleanup --keep VOL-002 --yes   # actually delete everyone else
+```
+
+Keep several people with `--keep VOL-002 PS/CSC/24/0016`. Add `--purge-inbox` to also delete the
+removed people's Supabase inbox submissions (needs `SUPABASE_URL` + `SUPABASE_SERVICE_KEY`, and the
+`delete` grant from [`docs/supabase_inbox.sql`](../docs/supabase_inbox.sql) — re-run that SQL file once
+if your project was created before the grant included `delete`).
+
 ## Web enrollment (phones)
 
 The student-facing app (`frontend/`, React + Vite + shadcn/ui, served at `/app`) lets group members
-enroll from their phones: they enter their **name + index number**, then capture 3 photos (look
-straight, turn left, turn right). The backend computes the face embeddings with the same model used
+enroll from their phones: they enter their **name + index number** (long formats like
+`PS/CSC/24/0016` are supported), then follow a **live guided capture** — look straight, turn left,
+turn right — while the camera stays live and collects several frames per pose automatically
+(no "take a photo" button). The backend computes the face embeddings with the same model used
 for attendance and stores them. No desktop capture needed for these volunteers.
 
 Build the frontend once before serving it locally (from the repository root):

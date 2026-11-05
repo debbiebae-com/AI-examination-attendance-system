@@ -3,7 +3,13 @@ import userEvent from "@testing-library/user-event"
 import { beforeEach, describe, expect, it, vi } from "vitest"
 import App from "@/App"
 import { FaceCapture } from "@/components/face-capture"
-import type { Photos } from "@/lib/enrollment"
+import { emptyPhotos, type Photos } from "@/lib/enrollment"
+
+// Speed up the guided sequence in UI tests; the real timings stay 3s countdown / 800ms frames.
+vi.mock("@/lib/enrollment", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("@/lib/enrollment")>()
+  return { ...actual, COUNTDOWN_SECONDS: 0, CAPTURE_INTERVAL_MS: 1, POSE_PAUSE_MS: 1 }
+})
 
 function mockCamera() {
   const stop = vi.fn()
@@ -24,11 +30,19 @@ function mockCapture() {
   return context
 }
 
+function fullPhotos(): Photos {
+  return {
+    straight: ["data:image/jpeg;base64,a", "data:image/jpeg;base64,b", "data:image/jpeg;base64,c"],
+    left: ["data:image/jpeg;base64,d", "data:image/jpeg;base64,e", "data:image/jpeg;base64,f"],
+    right: ["data:image/jpeg;base64,g", "data:image/jpeg;base64,h", "data:image/jpeg;base64,i"],
+  }
+}
+
 async function completeDetails(user: ReturnType<typeof userEvent.setup>) {
   await user.type(screen.getByRole("textbox", { name: /full name/i }), "Ama Mensah")
-  await user.type(screen.getByRole("textbox", { name: /index number/i }), "cs101-024")
+  await user.type(screen.getByRole("textbox", { name: /index number/i }), "ps/csc/24/0016")
   await user.click(screen.getByRole("checkbox"))
-  await user.click(screen.getByRole("button", { name: /continue to photos/i }))
+  await user.click(screen.getByRole("button", { name: /continue to capture/i }))
 }
 
 describe("enrollment app", () => {
@@ -41,7 +55,8 @@ describe("enrollment app", () => {
     const { container } = render(<App />)
     expect(screen.getByRole("heading", { name: /register your face/i })).toBeInTheDocument()
     expect(screen.getByRole("textbox", { name: /full name/i })).toBeEnabled()
-    expect(screen.getByRole("button", { name: /continue to photos/i })).toBeEnabled()
+    expect(screen.getByRole("button", { name: /continue to capture/i })).toBeEnabled()
+    expect(screen.getByPlaceholderText("e.g. PS/CSC/24/0016")).toBeInTheDocument()
     expect(container.querySelector(".overlay")).not.toBeInTheDocument()
     expect(container.querySelector('[data-slot="spinner"]')).not.toBeInTheDocument()
     expect(getUserMedia).not.toHaveBeenCalled()
@@ -52,37 +67,39 @@ describe("enrollment app", () => {
     const { getUserMedia } = mockCamera()
     const user = userEvent.setup()
     render(<App />)
-    await user.click(screen.getByRole("button", { name: /continue to photos/i }))
+    await user.click(screen.getByRole("button", { name: /continue to capture/i }))
     expect(screen.getByText("Enter your full name.")).toBeInTheDocument()
     expect(screen.getByText("Enter your index number.")).toBeInTheDocument()
     expect(screen.getByText(/consent is required/i)).toBeInTheDocument()
     expect(getUserMedia).not.toHaveBeenCalled()
     await completeDetails(user)
-    expect(await screen.findByRole("heading", { name: /capture your photos/i })).toBeInTheDocument()
+    expect(await screen.findByRole("heading", { name: /guided face capture/i })).toBeInTheDocument()
     await waitFor(() => expect(getUserMedia).toHaveBeenCalled())
   })
 
-  it("captures three poses and reports direct enrollment only after the API succeeds", async () => {
+  it("runs a guided video capture with no photo button and submits long index numbers", async () => {
     mockCamera()
     mockCapture()
     vi.mocked(fetch).mockResolvedValue(new Response(JSON.stringify({
-      ok: true, full_name: "Ama Mensah", student_no: "CS101-024", samples_saved: 3, registered_exam: "CS101",
+      ok: true, full_name: "Ama Mensah", student_no: "PS/CSC/24/0016", samples_saved: 9, registered_exam: "CS101",
     }), { status: 200, headers: { "Content-Type": "application/json" } }))
     const user = userEvent.setup()
     render(<App />)
     await completeDetails(user)
-    await waitFor(() => expect(screen.getByRole("button", { name: /capture front photo/i })).toBeEnabled())
-    await user.click(screen.getByRole("button", { name: /capture front photo/i }))
-    await user.click(screen.getByRole("button", { name: /next: left/i }))
-    await user.click(screen.getByRole("button", { name: /capture left photo/i }))
-    await user.click(screen.getByRole("button", { name: /next: right/i }))
-    await user.click(screen.getByRole("button", { name: /capture right photo/i }))
-    await user.click(screen.getByRole("button", { name: /submit enrollment/i }))
+    const start = await screen.findByRole("button", { name: /start guided capture/i })
+    await waitFor(() => expect(start).toBeEnabled())
+    expect(screen.queryByRole("button", { name: /capture front photo/i })).not.toBeInTheDocument()
+    expect(screen.getByLabelText(/mirrored live camera preview/i)).toBeInTheDocument()
+    await user.click(start)
+    await user.click(await screen.findByRole("button", { name: /submit enrollment/i }))
     expect(await screen.findByRole("heading", { name: /you're enrolled/i })).toBeInTheDocument()
     expect(fetch).toHaveBeenCalledWith("/enroll", expect.objectContaining({ method: "POST" }))
     const body = JSON.parse(vi.mocked(fetch).mock.calls[0][1]!.body as string)
-    expect(body.student_no).toBe("CS101-024")
-    expect(body.photos.map((photo: { step: string }) => photo.step)).toEqual(["straight", "left", "right"])
+    expect(body.student_no).toBe("PS/CSC/24/0016")
+    expect(body.photos).toHaveLength(9)
+    expect(body.photos.map((photo: { step: string }) => photo.step)).toEqual([
+      "straight", "straight", "straight", "left", "left", "left", "right", "right", "right",
+    ])
   })
 
   it("shows a recoverable camera permission error inside the camera card", async () => {
@@ -95,26 +112,25 @@ describe("enrollment app", () => {
     Object.defineProperty(window, "isSecureContext", { value: true, configurable: true })
     vi.spyOn(HTMLMediaElement.prototype, "play").mockResolvedValue(undefined)
     const user = userEvent.setup()
-    render(<FaceCapture photos={{ straight: null, left: null, right: null }} onChange={vi.fn()} onBack={vi.fn()} onSubmit={vi.fn()} submitting={false} submitError={null} />)
+    render(<FaceCapture photos={emptyPhotos()} onChange={vi.fn()} onBack={vi.fn()} onSubmit={vi.fn()} submitting={false} submitError={null} />)
     expect(await screen.findByText("Camera unavailable")).toBeInTheDocument()
     expect(screen.getByText(/camera access was blocked/i)).toBeInTheDocument()
     await user.click(screen.getByRole("button", { name: /try again/i }))
-    expect(await screen.findByText("Mirrored preview")).toBeInTheDocument()
+    await waitFor(() => expect(screen.getByRole("button", { name: /start guided capture/i })).toBeEnabled())
   })
 
   it("stops camera tracks when the capture card unmounts", async () => {
     const { stop } = mockCamera()
-    const { unmount } = render(<FaceCapture photos={{ straight: null, left: null, right: null }} onChange={vi.fn()} onBack={vi.fn()} onSubmit={vi.fn()} submitting={false} submitError={null} />)
-    await waitFor(() => expect(screen.getByRole("button", { name: /capture front photo/i })).toBeEnabled())
+    const { unmount } = render(<FaceCapture photos={emptyPhotos()} onChange={vi.fn()} onBack={vi.fn()} onSubmit={vi.fn()} submitting={false} submitError={null} />)
+    await waitFor(() => expect(screen.getByRole("button", { name: /start guided capture/i })).toBeEnabled())
     unmount()
     expect(stop).toHaveBeenCalled()
   })
 
   it("keeps loading inline and disables navigation while submitting", async () => {
     mockCamera()
-    const photos: Photos = { straight: "data:image/jpeg;base64,a", left: "data:image/jpeg;base64,b", right: "data:image/jpeg;base64,c" }
     const { container } = render(
-      <FaceCapture photos={photos} onChange={vi.fn()} onBack={vi.fn()} onSubmit={vi.fn()} submitting submitError={null} />,
+      <FaceCapture photos={fullPhotos()} onChange={vi.fn()} onBack={vi.fn()} onSubmit={vi.fn()} submitting submitError={null} />,
     )
     await waitFor(() => expect(screen.getByRole("button", { name: /submitting/i })).toBeDisabled())
     expect(screen.getByRole("button", { name: /back to details/i })).toBeDisabled()

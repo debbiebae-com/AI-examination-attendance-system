@@ -1,7 +1,7 @@
 """Sync pending web enrollments from a Supabase "inbox" into this machine's database.
 
 Hybrid architecture:
-  * The phone web app stores each submission (name, index number, 3 raw photos) in a Supabase
+  * The phone web app stores each submission (name, index number, guided-capture frames) in a Supabase
     table. No face model runs in the cloud, so there is no RAM limit and no accuracy loss.
   * When this PC is online, run this command. It downloads pending submissions, computes the
     embeddings locally with the SAME model used for attendance (default buffalo_l), saves them
@@ -79,6 +79,16 @@ class SupabaseInbox:
             f"/rest/v1/{TABLE}?id=eq.{urllib.parse.quote(submission_id)}",
             {"status": "failed", "error": error[:1000]},
         )
+
+    def fetch_all_ids(self) -> list[dict]:
+        """Every inbox row's id + student_no (used by the cleanup command)."""
+        return self._request("GET", f"/rest/v1/{TABLE}?select=id,student_no")
+
+    def delete_by_ids(self, ids: list[str]) -> None:
+        if not ids:
+            return
+        joined = ",".join(urllib.parse.quote(sid, safe="") for sid in ids)
+        self._request("DELETE", f"/rest/v1/{TABLE}?id=in.({joined})")
 
 
 @dataclass

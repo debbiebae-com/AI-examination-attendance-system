@@ -9,7 +9,7 @@ each member is ready to upload — without sacrificing accuracy.
 Member's phone (anytime)                 Your PC (when you're online)
 ┌──────────────────────┐                ┌────────────────────────────────┐
 │ Web app (static host)│                │  python -m app.sync            │
-│  name + index + 3 pics│──insert──┐    │   1. pull pending submissions   │
+│ name + index + frames│──insert──┐    │   1. pull pending submissions   │
 └──────────────────────┘          │    │   2. run buffalo_l  (full acc.) │
                                   ▼    │   3. save to local SQLite       │
                      ┌─────────────────┴─┐ 4. mark synced, wipe photos  │
@@ -92,9 +92,10 @@ variables in the host's build environment.
 ## Step 4 — Share the link
 
 Send the URL to the group. The details form appears immediately; the camera is requested only
-after they continue. Each member enters name + index number and captures the 3 photos. They'll see
-**"Photos received — Awaiting organizer sync."** Their submission is in Supabase; they are not
-enrolled until you sync on your PC.
+after they continue. Each member enters name + index number (e.g. `PS/CSC/24/0016`) and follows
+the live guided capture: look straight, turn left, turn right, while frames are collected
+automatically. They'll see **"Capture received — Awaiting organizer sync."** Their submission is
+in Supabase; they are not enrolled until you sync on your PC.
 
 ## Step 5 — Sync on your PC (when you're online)
 

@@ -66,7 +66,8 @@ export function DetailsForm({ initial, onContinue }: { initial: StudentDetails; 
               autoComplete="off"
               autoCapitalize="characters"
               spellCheck={false}
-              placeholder="e.g. CS101-024"
+              placeholder="e.g. PS/CSC/24/0016"
+              maxLength={32}
               className="h-11 font-mono"
               value={studentNo}
               onChange={(event) => setStudentNo(event.target.value)}
@@ -76,7 +77,7 @@ export function DetailsForm({ initial, onContinue }: { initial: StudentDetails; 
             />
             {errors.studentNo
               ? <p id="index-number-error" className="text-sm text-destructive">{errors.studentNo}</p>
-              : <p id="index-number-hint" className="text-xs text-muted-foreground">This links your photos to your exam record.</p>}
+              : <p id="index-number-hint" className="text-xs text-muted-foreground">Enter it exactly as printed, including slashes. It links your capture to your exam record.</p>}
           </div>
           <div className="rounded-lg border bg-muted/40 p-4">
             <div className="flex items-start gap-3">
@@ -89,11 +90,11 @@ export function DetailsForm({ initial, onContinue }: { initial: StudentDetails; 
                 aria-describedby="consent-description"
               />
               <Label htmlFor="consent" className="block text-sm leading-relaxed font-normal">
-                I consent to the exam organizer collecting these three photos and creating a face template for exam identity verification and attendance.
+                I consent to the exam organizer collecting a short guided face capture (multiple frames) and creating a face template for exam identity verification and attendance.
               </Label>
             </div>
             <p id="consent-description" className="mt-2 pl-7 text-xs text-muted-foreground">
-              You can review each photo before submitting.
+              You can review the collected frames before submitting.
             </p>
             {errors.consent && <p className="mt-2 pl-7 text-sm text-destructive">{errors.consent}</p>}
           </div>
@@ -101,7 +102,7 @@ export function DetailsForm({ initial, onContinue }: { initial: StudentDetails; 
         <CardFooter className="mt-6 flex-col gap-3 border-t pt-6 sm:flex-row sm:justify-between">
           <span className="text-xs text-muted-foreground">Step 1 of 3</span>
           <Button type="submit" size="lg" className="w-full sm:w-auto">
-            Continue to photos <ArrowRight aria-hidden="true" />
+            Continue to capture <ArrowRight aria-hidden="true" />
           </Button>
         </CardFooter>
       </form>

@@ -56,8 +56,8 @@ def list_status(session, exam: Exam) -> None:
         print("No enrolled or registered students yet. Run the face capture first.")
         return
 
-    print(f"{'Student':<14}{'Name':<26}{'Registered':<12}{'Faces':<7}{'Eligible'}")
-    print("-" * 78)
+    print(f"{'Student':<18}{'Name':<26}{'Registered':<12}{'Faces':<7}{'Eligible'}")
+    print("-" * 82)
     for student in relevant:
         registered = student.id in registered_ids
         faces = sample_counts.get(student.id, 0)
@@ -66,7 +66,7 @@ def list_status(session, exam: Exam) -> None:
         )
         eligible = "yes" if result.eligible else "no (" + "; ".join(result.reasons) + ")"
         print(
-            f"{student.student_no:<14}{student.full_name:<26}{'yes' if registered else 'NO':<12}"
+            f"{student.student_no:<18}{student.full_name:<26}{'yes' if registered else 'NO':<12}"
             f"{faces:<7}{eligible}"
         )
     print("\n'Registered=NO' or 'Faces=0' means attendance will not record that person.")

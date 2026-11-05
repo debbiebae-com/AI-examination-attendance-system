@@ -1,8 +1,13 @@
 # Student enrollment frontend
 
 React 19 + Vite + TypeScript + Tailwind CSS 4 + [shadcn/ui](https://ui.shadcn.com) (new-york,
-neutral). The details form renders immediately; the camera is requested only on the photos step,
+neutral). The details form renders immediately; the camera is requested only on the capture step,
 and submission loading is inline on the submit button.
+
+The capture step is a **live guided video**, not a still-photo booth: it prompts look straight →
+turn left → turn right and automatically collects 3 frames per pose (9 total) while the preview
+stays live. Long index numbers such as `PS/CSC/24/0016` are supported. The PC sync performs the
+final face-quality check with the same InsightFace model used for attendance.
 
 ## Commands
 

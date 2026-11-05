@@ -158,7 +158,7 @@ tier is plenty for a class.
    `ENROLL_MODEL` is also a Docker build arg, so the image pre-downloads `buffalo_s` at build time.
 5. Deploy. Render gives you `https://<name>.onrender.com`. Opening it redirects to `/app`.
 6. Share that URL with the group. Each person opens it on their phone, enters name + index number,
-   and captures the 3 photos. Their data lands in Supabase.
+   and follows the live guided capture (frames are collected automatically). Their data lands in Supabase.
 
 **Run attendance against the same data (on your PC):**
 

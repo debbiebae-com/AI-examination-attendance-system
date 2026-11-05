@@ -4,23 +4,31 @@ import { capturePhoto, emptyPhotos, submitEnrollment, type Photos } from "@/lib/
 
 const direct: EnrollmentConfig = { apiBase: "", exam: "CS101", supabaseUrl: "", supabaseAnonKey: "" }
 const inbox: EnrollmentConfig = { apiBase: "", exam: "CS101", supabaseUrl: "https://example.supabase.co", supabaseAnonKey: "public-anon-key" }
-const details = { fullName: " Ama Mensah ", studentNo: " cs101-024 " }
-const photos: Photos = { straight: "data:image/jpeg;base64,a", left: "data:image/jpeg;base64,b", right: "data:image/jpeg;base64,c" }
+const details = { fullName: " Ama Mensah ", studentNo: " ps/csc/24/0016 " }
+const photos: Photos = {
+  straight: ["data:image/jpeg;base64,a", "data:image/jpeg;base64,b", "data:image/jpeg;base64,c"],
+  left: ["data:image/jpeg;base64,d", "data:image/jpeg;base64,e", "data:image/jpeg;base64,f"],
+  right: ["data:image/jpeg;base64,g", "data:image/jpeg;base64,h", "data:image/jpeg;base64,i"],
+}
 const ok = () => new Response(null, { status: 201 })
 
 describe("submitEnrollment", () => {
-  it("posts the unchanged direct contract and reports enrolled only on success", async () => {
+  it("posts every guided frame with its pose and reports enrolled only on success", async () => {
     const fetchImpl = vi.fn<typeof fetch>().mockResolvedValue(new Response(JSON.stringify({
-      student_no: "CS101-024", full_name: "Ama Mensah", samples_saved: 3, registered_exam: "CS101",
+      student_no: "PS/CSC/24/0016", full_name: "Ama Mensah", samples_saved: 9, registered_exam: "CS101",
     }), { status: 200 }))
     const receipt = await submitEnrollment(details, photos, direct, fetchImpl)
     expect(fetchImpl).toHaveBeenCalledWith("/enroll", expect.objectContaining({ method: "POST" }))
     const init = fetchImpl.mock.calls[0][1]!
-    expect(JSON.parse(init.body as string)).toEqual({
-      full_name: "Ama Mensah", student_no: "CS101-024", exam: "CS101",
-      photos: [{ step: "straight", image: photos.straight }, { step: "left", image: photos.left }, { step: "right", image: photos.right }],
-    })
-    expect(receipt).toMatchObject({ status: "enrolled", studentNo: "CS101-024", photoCount: 3, exam: "CS101" })
+    const body = JSON.parse(init.body as string)
+    expect(body.full_name).toBe("Ama Mensah")
+    expect(body.student_no).toBe("PS/CSC/24/0016")
+    expect(body.exam).toBe("CS101")
+    expect(body.photos).toHaveLength(9)
+    expect(body.photos[0]).toEqual({ step: "straight", image: photos.straight[0] })
+    expect(body.photos[3]).toEqual({ step: "left", image: photos.left[0] })
+    expect(body.photos[6]).toEqual({ step: "right", image: photos.right[0] })
+    expect(receipt).toMatchObject({ status: "enrolled", studentNo: "PS/CSC/24/0016", photoCount: 9, exam: "CS101" })
   })
 
   it("inserts into the Supabase inbox and honestly reports queued, not enrolled", async () => {
@@ -31,9 +39,10 @@ describe("submitEnrollment", () => {
       headers: expect.objectContaining({ apikey: "public-anon-key", Authorization: "Bearer public-anon-key", Prefer: "return=minimal" }),
     }))
     expect(receipt.status).toBe("queued")
+    expect(receipt.photoCount).toBe(9)
   })
 
-  it("rejects incomplete inbox configuration and secret browser keys before sending photos", async () => {
+  it("rejects incomplete inbox configuration and secret browser keys before sending frames", async () => {
     const fetchImpl = vi.fn<typeof fetch>()
     await expect(submitEnrollment(details, photos, { ...inbox, supabaseAnonKey: "" }, fetchImpl)).rejects.toThrow(/partly configured/i)
     await expect(submitEnrollment(details, photos, { ...inbox, supabaseAnonKey: "sb_secret_do-not-use" }, fetchImpl)).rejects.toThrow(/secret key/i)
@@ -42,8 +51,8 @@ describe("submitEnrollment", () => {
     expect(isSecretBrowserKey("public-anon-key")).toBe(false)
   })
 
-  it("requires all three photos", async () => {
-    await expect(submitEnrollment(details, { ...emptyPhotos(), straight: "x" }, direct, vi.fn())).rejects.toThrow(/left photo/i)
+  it("requires frames for every pose", async () => {
+    await expect(submitEnrollment(details, { ...emptyPhotos(), straight: ["x"] }, direct, vi.fn())).rejects.toThrow(/left capture/i)
   })
 
   it("explains a missing static-host enrollment endpoint instead of spinning forever", async () => {

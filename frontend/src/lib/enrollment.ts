@@ -1,13 +1,20 @@
 import { isSecretBrowserKey, usesInbox, type EnrollmentConfig } from "@/lib/config"
 
+// Guided capture mirrors the desktop flow: one prompt per pose, several frames collected
+// automatically while the person follows the instruction. The PC sync does the face check.
+export const FRAMES_PER_POSE = 3
+export const COUNTDOWN_SECONDS = 3
+export const CAPTURE_INTERVAL_MS = 800
+export const POSE_PAUSE_MS = 1200
+
 export const POSES = [
-  { step: "straight", label: "Front", title: "Look straight ahead", hint: "Face the camera at eye level." },
-  { step: "left", label: "Left", title: "Turn slightly left", hint: "Turn toward your own left, not the screen's left." },
-  { step: "right", label: "Right", title: "Turn slightly right", hint: "Turn toward your own right. Keep your face visible." },
+  { step: "straight", label: "Front", title: "Look straight at the camera", hint: "Face the camera at eye level and hold still." },
+  { step: "left", label: "Left", title: "Slowly turn your head to your LEFT", hint: "Turn toward your own left, not the screen's left." },
+  { step: "right", label: "Right", title: "Slowly turn your head to your RIGHT", hint: "Turn toward your own right. Keep your face visible." },
 ] as const
 
 export type PoseStep = (typeof POSES)[number]["step"]
-export type Photos = Record<PoseStep, string | null>
+export type Photos = Record<PoseStep, string[]>
 export type StudentDetails = { fullName: string; studentNo: string }
 export type Receipt = StudentDetails & {
   photoCount: number
@@ -15,7 +22,14 @@ export type Receipt = StudentDetails & {
   status: "queued" | "enrolled"
 }
 
-export const emptyPhotos = (): Photos => ({ straight: null, left: null, right: null })
+export const emptyPhotos = (): Photos => ({ straight: [], left: [], right: [] })
+export const copyPhotos = (photos: Photos): Photos => ({
+  straight: [...photos.straight],
+  left: [...photos.left],
+  right: [...photos.right],
+})
+export const totalFrames = (photos: Photos) => POSES.reduce((sum, { step }) => sum + photos[step].length, 0)
+export const captureComplete = (photos: Photos) => POSES.every(({ step }) => photos[step].length >= FRAMES_PER_POSE)
 
 export function capturePhoto(video: HTMLVideoElement, maxDimension = 720) {
   if (!video.videoWidth || !video.videoHeight) {
@@ -26,7 +40,7 @@ export function capturePhoto(video: HTMLVideoElement, maxDimension = 720) {
   canvas.width = Math.round(video.videoWidth * scale)
   canvas.height = Math.round(video.videoHeight * scale)
   const context = canvas.getContext("2d")
-  if (!context) throw new Error("This browser could not capture the photo. Try a current browser.")
+  if (!context) throw new Error("This browser could not capture the frame. Try a current browser.")
   // Match the mirrored orientation used by desktop capture and live attendance.
   context.translate(canvas.width, 0)
   context.scale(-1, 1)
@@ -66,10 +80,10 @@ export async function submitEnrollment(
   if (inbox && isSecretBrowserKey(config.supabaseAnonKey)) {
     throw new Error("A secret key was supplied to the browser. Ask the organizer to replace it with the public anon or publishable key.")
   }
-  const payloadPhotos = POSES.map(({ step }) => {
-    const image = photos[step]
-    if (!image) throw new Error(`Capture the ${step} photo before submitting.`)
-    return { step, image }
+  const payloadPhotos = POSES.flatMap(({ step }) => {
+    const frames = photos[step]
+    if (frames.length === 0) throw new Error(`Complete the ${step} capture before submitting.`)
+    return frames.map((image) => ({ step, image }))
   })
   const payload = {
     full_name: details.fullName.trim(),

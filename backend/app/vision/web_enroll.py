@@ -1,8 +1,9 @@
-"""Web enrollment: turn phone-camera photos into stored face embeddings.
+"""Web enrollment: turn phone guided-capture frames into stored face embeddings.
 
-The phone captures a few photos (look straight, turn left, turn right) and posts them here.
-Each photo must contain exactly one face; its ArcFace embedding is computed with the SAME
-model used by live attendance, so the samples are directly usable for recognition.
+The phone runs a live guided capture (look straight, turn left, turn right) that collects
+several frames per pose automatically and posts them here. Each frame must contain exactly
+one face; its ArcFace embedding is computed with the SAME model used by live attendance,
+so the samples are directly usable for recognition.
 
 This module is pure logic (no camera, no web framework) so it is unit tested with a fake
 embedder. ``decode_image`` and the FastAPI endpoint live in main.py / drive this.

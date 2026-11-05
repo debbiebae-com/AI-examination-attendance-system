@@ -4,7 +4,7 @@
 -- See docs/HYBRID_SYNC.md for the full walkthrough.
 -- ============================================================================
 
--- The inbox table. Each row is one member's submission (name, index number, 3 photos).
+-- The inbox table. Each row is one member's submission (name, index number, guided-capture frames).
 -- Photos are stored as base64 in a JSONB column and are WIPED after the organizer syncs,
 -- so biometric data doesn't linger in the cloud.
 create table if not exists public.enroll_submissions (
@@ -33,10 +33,15 @@ drop policy if exists "anon can submit" on public.enroll_submissions;
 create policy "anon can submit" on public.enroll_submissions
   for insert to anon with check (true);
 
--- The SECRET service_role key (used only by the organizer's PC sync) reads pending rows
--- and marks them synced/failed. service_role bypasses RLS, so it needs grants, not policies.
-grant select, update on public.enroll_submissions to service_role;
+-- The SECRET service_role key (used only by the organizer's PC sync/cleanup) reads pending
+-- rows, marks them synced/failed, and can delete rows during a cleanup. service_role bypasses
+-- RLS, so it needs grants, not policies.
+grant select, update, delete on public.enroll_submissions to service_role;
 
+-- ============================================================================
+-- Existing project created before the delete grant? Run this once to enable
+-- `app.cleanup --purge-inbox`:
+--   grant delete on public.enroll_submissions to service_role;
 -- ============================================================================
 -- That's it. Now:
 --   1. In Netlify environment variables set VITE_SUPABASE_URL + VITE_SUPABASE_ANON_KEY

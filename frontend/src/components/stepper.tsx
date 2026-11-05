@@ -1,7 +1,7 @@
 import { Check } from "lucide-react"
 import { cn } from "@/lib/utils"
 
-const steps = ["Details", "Photos", "Confirmation"]
+const steps = ["Details", "Capture", "Confirmation"]
 
 export function Stepper({ current }: { current: number }) {
   return (

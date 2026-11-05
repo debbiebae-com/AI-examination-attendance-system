@@ -63,10 +63,10 @@ export default function App() {
         <div className="mb-8 space-y-2">
           <p className="text-xs font-medium tracking-widest text-muted-foreground uppercase">Student enrollment</p>
           <h1 className="text-3xl font-semibold tracking-tight text-balance">Register your face</h1>
-          <p className="text-sm text-muted-foreground sm:text-base">Three photos now. Faster check-in on exam day.</p>
+          <p className="text-sm text-muted-foreground sm:text-base">A short guided capture. Faster check-in on exam day.</p>
         </div>
         <div className="mb-6"><Stepper current={current} /></div>
-        <div aria-live="polite" className="sr-only">Step {current + 1} of 3: {["Details", "Photos", "Confirmation"][current]}</div>
+        <div aria-live="polite" className="sr-only">Step {current + 1} of 3: {["Details", "Capture", "Confirmation"][current]}</div>
 
         {stage === "details" && (
           <DetailsForm initial={details} onContinue={(value) => { setDetails(value); setStage("camera") }} />
@@ -85,7 +85,7 @@ export default function App() {
 
         <div className="mt-6 flex items-start justify-center gap-2 px-4 text-center text-xs leading-relaxed text-muted-foreground">
           <ShieldCheck className="mt-0.5 size-3.5 shrink-0" aria-hidden="true" />
-          <p>These photos are collected for exam identity verification and attendance.</p>
+          <p>These frames are collected for exam identity verification and attendance.</p>
         </div>
       </main>
 

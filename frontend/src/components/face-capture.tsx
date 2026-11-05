@@ -1,11 +1,25 @@
-import { useState } from "react"
-import { ArrowLeft, ArrowRight, Camera, Check, CircleAlert, RefreshCw, Send, VideoOff } from "lucide-react"
+import { useEffect, useRef, useState } from "react"
+import { ArrowLeft, Camera, Check, CircleAlert, Play, RefreshCw, Send, Video, VideoOff } from "lucide-react"
 import { Alert, AlertDescription } from "@/components/ui/alert"
+import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card"
+import { Progress } from "@/components/ui/progress"
 import { Spinner } from "@/components/ui/spinner"
 import { useCamera } from "@/hooks/use-camera"
-import { capturePhoto, POSES, type Photos, type PoseStep } from "@/lib/enrollment"
+import {
+  CAPTURE_INTERVAL_MS,
+  COUNTDOWN_SECONDS,
+  FRAMES_PER_POSE,
+  POSE_PAUSE_MS,
+  POSES,
+  captureComplete,
+  capturePhoto,
+  copyPhotos,
+  emptyPhotos,
+  totalFrames,
+  type Photos,
+} from "@/lib/enrollment"
 import { cn } from "@/lib/utils"
 
 type Props = {
@@ -17,61 +31,128 @@ type Props = {
   submitError: string | null
 }
 
+type Phase = "ready" | "countdown" | "collecting" | "transition" | "complete" | "error"
+
+const sleep = (ms: number) => new Promise<void>((resolve) => window.setTimeout(resolve, ms))
+
 export function FaceCapture({ photos, onChange, onBack, onSubmit, submitting, submitError }: Props) {
   const { videoRef, status, error, retry } = useCamera()
-  const [active, setActive] = useState<PoseStep>(() => POSES.find(({ step }) => !photos[step])?.step ?? "right")
+  const [phase, setPhase] = useState<Phase>(() => (captureComplete(photos) ? "complete" : "ready"))
+  const [activeIndex, setActiveIndex] = useState(0)
+  const [countdown, setCountdown] = useState(COUNTDOWN_SECONDS)
   const [captureError, setCaptureError] = useState<string | null>(null)
-  const pose = POSES.find(({ step }) => step === active)!
-  const captured = photos[active]
-  const remaining = POSES.filter(({ step }) => !photos[step])
-  const next = remaining.find(({ step }) => step !== active)
+  const runId = useRef(0)
+  const collected = useRef<Photos>(copyPhotos(photos))
 
-  function capture() {
-    if (!videoRef.current) return
+  useEffect(() => () => { runId.current += 1 }, [])
+
+  // If the camera drops mid-capture, stop the sequence instead of collecting stale frames.
+  useEffect(() => {
+    if (status === "error" && (phase === "countdown" || phase === "collecting" || phase === "transition")) {
+      runId.current += 1
+      setPhase("ready")
+    }
+  }, [status, phase])
+
+  async function start() {
+    const token = ++runId.current
+    const cancelled = () => runId.current !== token
+    collected.current = emptyPhotos()
+    onChange(emptyPhotos())
+    setCaptureError(null)
+    setActiveIndex(0)
     try {
-      onChange({ ...photos, [active]: capturePhoto(videoRef.current) })
-      setCaptureError(null)
+      for (let i = 0; i < POSES.length; i++) {
+        setActiveIndex(i)
+        setPhase("countdown")
+        for (let c = COUNTDOWN_SECONDS; c >= 1; c--) {
+          setCountdown(c)
+          await sleep(1000)
+          if (cancelled()) return
+        }
+        setPhase("collecting")
+        for (let frame = 0; frame < FRAMES_PER_POSE; frame++) {
+          await sleep(CAPTURE_INTERVAL_MS)
+          if (cancelled()) return
+          const video = videoRef.current
+          if (!video) throw new Error("The camera preview disappeared. Restart the capture.")
+          const image = capturePhoto(video, 640)
+          const step = POSES[i].step
+          collected.current = { ...collected.current, [step]: [...collected.current[step], image] }
+          onChange(copyPhotos(collected.current))
+        }
+        if (i < POSES.length - 1) {
+          setPhase("transition")
+          await sleep(POSE_PAUSE_MS)
+          if (cancelled()) return
+        }
+      }
+      if (!cancelled()) setPhase("complete")
     } catch (cause) {
-      setCaptureError(cause instanceof Error ? cause.message : "Could not capture the photo. Try again.")
+      if (cancelled()) return
+      setCaptureError(cause instanceof Error ? cause.message : "Could not collect frames. Restart the capture.")
+      setPhase("error")
     }
   }
+
+  const pose = POSES[activeIndex]
+  const nextPose = POSES[activeIndex + 1]
+  const running = phase === "countdown" || phase === "collecting" || phase === "transition"
+  const frames = totalFrames(photos)
+  const progress = Math.round((frames / (FRAMES_PER_POSE * POSES.length)) * 100)
+
+  const prompt =
+    phase === "complete" ? "Capture complete" :
+    phase === "transition" && nextPose ? `Good. Next: ${nextPose.title.toLowerCase()}` :
+    pose.title
 
   return (
     <Card aria-busy={submitting}>
       <CardHeader>
-        <CardTitle className="text-xl">Capture your photos</CardTitle>
-        <CardDescription>One at a time, in good light. Keep your whole face inside the guide.</CardDescription>
+        <CardTitle className="text-xl">Guided face capture</CardTitle>
+        <CardDescription>
+          Follow the prompts while the camera stays live. Frames are collected automatically — no photo button.
+        </CardDescription>
       </CardHeader>
       <CardContent className="space-y-5">
-        <div className="grid grid-cols-3 gap-3" aria-label="Photo checklist">
-          {POSES.map(({ step, label }) => (
-            <div
-              key={step}
-              className={cn(
-                "relative flex aspect-[4/3] items-center justify-center overflow-hidden rounded-lg border bg-muted",
-                step === active && "ring-2 ring-primary ring-offset-2 ring-offset-card",
-              )}
-              aria-label={`${label} photo ${photos[step] ? "captured" : "not captured"}`}
-            >
-              {photos[step]
-                ? <img src={photos[step]!} alt={`${label} capture`} className="absolute inset-0 size-full object-cover" />
-                : <Camera className="size-5 text-muted-foreground" aria-hidden="true" />}
-              <span className="absolute bottom-1.5 left-1.5 rounded bg-background/90 px-1.5 py-0.5 text-[11px] font-medium">
-                {label}
-              </span>
-              {photos[step] && (
-                <span className="absolute top-1.5 right-1.5 rounded-full bg-primary p-0.5 text-primary-foreground">
-                  <Check className="size-3" aria-hidden="true" />
+        <div className="grid grid-cols-3 gap-3" aria-label="Capture checklist">
+          {POSES.map(({ step, label }, index) => {
+            const count = photos[step].length
+            const done = count >= FRAMES_PER_POSE
+            const last = count > 0 ? photos[step][count - 1] : null
+            return (
+              <div
+                key={step}
+                className={cn(
+                  "relative flex aspect-[4/3] items-center justify-center overflow-hidden rounded-lg border bg-muted",
+                  running && index === activeIndex && "ring-2 ring-primary ring-offset-2 ring-offset-card",
+                )}
+                aria-label={`${label}: ${count} of ${FRAMES_PER_POSE} frames`}
+              >
+                {last
+                  ? <img src={last} alt={`${label} latest frame`} className="absolute inset-0 size-full object-cover" />
+                  : <Video className="size-5 text-muted-foreground" aria-hidden="true" />}
+                <span className="absolute bottom-1.5 left-1.5 rounded bg-background/90 px-1.5 py-0.5 text-[11px] font-medium">
+                  {label} · {count}/{FRAMES_PER_POSE}
                 </span>
-              )}
-            </div>
-          ))}
+                {done && (
+                  <span className="absolute top-1.5 right-1.5 rounded-full bg-primary p-0.5 text-primary-foreground">
+                    <Check className="size-3" aria-hidden="true" />
+                  </span>
+                )}
+              </div>
+            )
+          })}
         </div>
 
-        <div className="text-center">
-          <h3 className="font-medium">{captured ? `${pose.label} photo captured` : pose.title}</h3>
+        <div className="text-center" aria-live="polite">
+          <h3 className="font-medium">{prompt}</h3>
           <p className="mt-1 text-sm text-muted-foreground">
-            {captured ? "Review it below. Retake if needed, or continue." : pose.hint}
+            {phase === "complete"
+              ? `${frames} frames collected. Review the thumbnails, then submit.`
+              : phase === "transition"
+                ? "Keep your face in the guide."
+                : pose.hint}
           </p>
         </div>
 
@@ -81,19 +162,30 @@ export function FaceCapture({ photos, onChange, onBack, onSubmit, submitting, su
             muted
             playsInline
             autoPlay
-            aria-label="Mirrored camera preview"
-            className={cn("absolute inset-0 size-full -scale-x-100 object-cover", captured && "invisible")}
+            aria-label="Mirrored live camera preview"
+            className="absolute inset-0 size-full -scale-x-100 object-cover"
           />
-          {captured && <img src={captured} alt={`${pose.label} review`} className="absolute inset-0 size-full object-cover" />}
-          {!captured && status === "ready" && (
-            <>
-              <div className="pointer-events-none absolute top-[16%] left-1/2 h-[62%] w-[64%] -translate-x-1/2 rounded-[50%] border-2 border-white/70" aria-hidden="true" />
-              <span className="absolute bottom-3 left-1/2 -translate-x-1/2 rounded-full bg-black/60 px-3 py-1 text-xs text-white">
-                Mirrored preview
-              </span>
-            </>
+          {status === "ready" && (phase === "countdown" || phase === "collecting" || phase === "ready") && (
+            <div className="pointer-events-none absolute top-[16%] left-1/2 h-[62%] w-[64%] -translate-x-1/2 rounded-[50%] border-2 border-white/70" aria-hidden="true" />
           )}
-          {!captured && status !== "ready" && (
+          {status === "ready" && phase === "countdown" && (
+            <div className="absolute inset-0 flex flex-col items-center justify-center gap-2 bg-black/40 text-white">
+              <span className="text-6xl font-semibold tabular-nums">{countdown}</span>
+              <span className="text-sm">Get ready…</span>
+            </div>
+          )}
+          {status === "ready" && phase === "collecting" && (
+            <span className="absolute bottom-3 left-1/2 flex -translate-x-1/2 items-center gap-2 rounded-full bg-black/70 px-3 py-1 text-xs text-white">
+              <span className="size-2 animate-pulse rounded-full bg-red-500" aria-hidden="true" />
+              Collecting {photos[pose.step].length}/{FRAMES_PER_POSE} — hold still
+            </span>
+          )}
+          {status === "ready" && phase === "complete" && (
+            <span className="absolute bottom-3 left-1/2 flex -translate-x-1/2 items-center gap-1.5 rounded-full bg-black/70 px-3 py-1 text-xs text-white">
+              <Check className="size-3.5" aria-hidden="true" /> Capture complete
+            </span>
+          )}
+          {status !== "ready" && (
             <div className="absolute inset-0 flex flex-col items-center justify-center gap-3 p-6 text-center text-neutral-300">
               {status === "requesting" ? <Camera className="size-8" aria-hidden="true" /> : <VideoOff className="size-8" aria-hidden="true" />}
               <p className="text-sm font-medium text-white">{status === "requesting" ? "Waiting for camera permission" : "Camera unavailable"}</p>
@@ -105,6 +197,14 @@ export function FaceCapture({ photos, onChange, onBack, onSubmit, submitting, su
               )}
             </div>
           )}
+        </div>
+
+        <div className="space-y-1.5">
+          <div className="flex items-center justify-between text-xs text-muted-foreground">
+            <span>{frames} of {FRAMES_PER_POSE * POSES.length} frames</span>
+            {running ? <Badge variant="secondary">Live</Badge> : phase === "complete" ? <Badge variant="secondary">Ready to submit</Badge> : null}
+          </div>
+          <Progress value={progress} aria-label="Capture progress" />
         </div>
 
         {(captureError || submitError) && (
@@ -119,25 +219,23 @@ export function FaceCapture({ photos, onChange, onBack, onSubmit, submitting, su
           <ArrowLeft aria-hidden="true" /> Back to details
         </Button>
         <div className="flex w-full gap-2 sm:w-auto">
-          {captured ? (
+          {phase === "complete" ? (
             <>
-              <Button variant="outline" size="lg" onClick={() => onChange({ ...photos, [active]: null })} disabled={submitting} className="flex-1 sm:flex-none">
-                <RefreshCw aria-hidden="true" /> Retake
+              <Button variant="outline" size="lg" onClick={() => void start()} disabled={submitting} className="flex-1 sm:flex-none">
+                <RefreshCw aria-hidden="true" /> Redo capture
               </Button>
-              {next ? (
-                <Button size="lg" onClick={() => setActive(next.step)} disabled={submitting} className="flex-1 sm:flex-none">
-                  Next: {next.label} <ArrowRight aria-hidden="true" />
-                </Button>
-              ) : (
-                <Button size="lg" onClick={onSubmit} disabled={submitting} className="flex-1 sm:flex-none">
-                  {submitting ? <Spinner aria-label="Submitting enrollment" /> : <Send aria-hidden="true" />}
-                  {submitting ? "Submitting…" : "Submit enrollment"}
-                </Button>
-              )}
+              <Button size="lg" onClick={onSubmit} disabled={submitting} className="flex-1 sm:flex-none">
+                {submitting ? <Spinner aria-label="Submitting enrollment" /> : <Send aria-hidden="true" />}
+                {submitting ? "Submitting…" : "Submit enrollment"}
+              </Button>
             </>
+          ) : running ? (
+            <Button variant="outline" size="lg" onClick={() => void start()} disabled={submitting} className="w-full sm:w-auto">
+              <RefreshCw aria-hidden="true" /> Restart capture
+            </Button>
           ) : (
-            <Button size="lg" onClick={capture} disabled={status !== "ready" || submitting} className="w-full sm:w-auto">
-              <Camera aria-hidden="true" /> Capture {pose.label.toLowerCase()} photo
+            <Button size="lg" onClick={() => void start()} disabled={status !== "ready" || submitting} className="w-full sm:w-auto">
+              <Play aria-hidden="true" /> {phase === "error" ? "Restart capture" : "Start guided capture"}
             </Button>
           )}
         </div>

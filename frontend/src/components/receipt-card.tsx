@@ -14,7 +14,7 @@ export function ReceiptCard({ receipt, onReset }: { receipt: Receipt; onReset: (
         <div className="mx-auto mb-2 flex size-12 items-center justify-center rounded-full bg-muted">
           {queued ? <Clock3 className="size-6" aria-hidden="true" /> : <Check className="size-6" aria-hidden="true" />}
         </div>
-        <CardTitle className="text-xl">{queued ? "Photos received" : "You're enrolled"}</CardTitle>
+        <CardTitle className="text-xl">{queued ? "Capture received" : "You're enrolled"}</CardTitle>
         <CardDescription className="mx-auto max-w-md">
           {queued
             ? "Your submission is in the organizer's inbox. You are not enrolled until the organizer runs the PC sync."
@@ -25,9 +25,9 @@ export function ReceiptCard({ receipt, onReset }: { receipt: Receipt; onReset: (
         <dl className="space-y-3 text-sm">
           <div className="flex justify-between gap-4"><dt className="text-muted-foreground">Name</dt><dd className="text-right font-medium">{receipt.fullName}</dd></div>
           <Separator />
-          <div className="flex justify-between gap-4"><dt className="text-muted-foreground">Index number</dt><dd className="text-right font-mono font-medium">{receipt.studentNo}</dd></div>
+          <div className="flex justify-between gap-4"><dt className="shrink-0 text-muted-foreground">Index number</dt><dd className="break-all text-right font-mono font-medium">{receipt.studentNo}</dd></div>
           <Separator />
-          <div className="flex justify-between gap-4"><dt className="text-muted-foreground">Photos</dt><dd className="font-medium">{receipt.photoCount} captured</dd></div>
+          <div className="flex justify-between gap-4"><dt className="text-muted-foreground">Frames</dt><dd className="font-medium">{receipt.photoCount} captured</dd></div>
           {receipt.exam && (
             <>
               <Separator />
@@ -43,7 +43,7 @@ export function ReceiptCard({ receipt, onReset }: { receipt: Receipt; onReset: (
         {queued && (
           <Alert className="mt-5">
             <Info aria-hidden="true" />
-            <AlertDescription>Keep your index number for exam day. Contact the organizer before syncing if you need to correct a photo.</AlertDescription>
+            <AlertDescription>Keep your index number for exam day. Contact the organizer before syncing if you need to redo the capture.</AlertDescription>
           </Alert>
         )}
       </CardContent>
