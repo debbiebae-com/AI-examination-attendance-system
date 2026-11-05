@@ -6,6 +6,7 @@ from sqlalchemy import (
     Float,
     ForeignKey,
     Integer,
+    LargeBinary,
     String,
     UniqueConstraint,
 )
@@ -65,3 +66,15 @@ class AttendanceRecord(Base):
     source: Mapped[str] = mapped_column(String(16), default="manual")  # "camera" or "manual"
 
     student: Mapped[Student] = relationship()
+
+
+class FaceEmbedding(Base):
+    """A 512-d ArcFace embedding stored as float32 bytes, one row per enrollment photo."""
+
+    __tablename__ = "face_embeddings"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    student_id: Mapped[int] = mapped_column(ForeignKey("students.id"), index=True)
+    embedding: Mapped[bytes] = mapped_column(LargeBinary)
+    source_photo: Mapped[str] = mapped_column(String(255))
+    det_score: Mapped[float] = mapped_column(Float)

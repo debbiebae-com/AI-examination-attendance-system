@@ -43,6 +43,29 @@ data/demo_photos/ synthetic enrollment photos (fictional people)
 tests/            pytest suite
 ```
 
+## Face recognition (vision extra)
+
+Recognition uses InsightFace's `buffalo_l` model: SCRFD for face detection and ArcFace for embeddings. It is optional, so the API and tests run without it.
+
+On your PC, from `backend/`:
+
+```bash
+uv sync --extra vision
+uv run python -m app.vision.spike
+```
+
+The first run downloads `buffalo_l` (about 300 MB) from GitHub to `~/.insightface`. The spike then:
+
+1. Enrolls the five demo photos. Each photo must contain exactly one face.
+2. Matches each photo back against the enrolled gallery. Each should match its own student.
+
+Matching settings are in `app/vision/matcher.py`. `DEFAULT_THRESHOLD = 0.40` and `DEFAULT_MARGIN = 0.05` are starting values. Tune them on real camera footage before the demo. You can also override them with `--threshold` and `--margin`.
+
+Notes on the vision dependencies:
+
+- The extra uses InsightFace 2.1, which installs from a pre-built wheel. InsightFace 0.7.3 must compile C++ code, which needs Microsoft's C++ Build Tools on Windows.
+- Model weights are for non-commercial research use only (see the project's licensing note).
+
 ## Notes
 
 - Attendance times are stored as UTC. Ghana (Accra) is UTC+0 year-round, so no conversion is needed for display.
