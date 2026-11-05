@@ -39,8 +39,11 @@ grant select, update on public.enroll_submissions to service_role;
 
 -- ============================================================================
 -- That's it. Now:
---   1. Put your Project URL + anon key in frontend/config.js (SUPABASE_URL / SUPABASE_ANON_KEY).
---   2. Host the frontend/ folder on any free static host (Cloudflare Pages / Netlify).
+--   1. In Netlify environment variables set VITE_SUPABASE_URL + VITE_SUPABASE_ANON_KEY
+--      (public anon/publishable key only) and optionally VITE_ENROLL_EXAM.
+--      For drag-and-drop builds, frontend/public/config.js is the runtime alternative.
+--   2. Deploy the built app: Git-connected Netlify uses netlify.toml; manual uploads use
+--      frontend/dist after `npm ci && npm run build` (never the unbuilt source folder).
 --   3. On your PC, set SUPABASE_URL + SUPABASE_SERVICE_KEY and run:
---        uv run --extra vision python -m app.sync
+--        uv run --frozen --extra vision python -m app.sync
 -- ============================================================================

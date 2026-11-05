@@ -202,7 +202,7 @@ def record_attendance(
     }
 
 
-# Serve the student-facing web app from the same server (one URL for the whole demo).
+# Serve the compiled student app (frontend/dist) from the same server.
 # API routes above take precedence; the static mount only catches /app paths.
 if FRONTEND_DIR.exists():
     app.mount("/app", StaticFiles(directory=str(FRONTEND_DIR), html=True), name="app")

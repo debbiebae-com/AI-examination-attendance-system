@@ -50,42 +50,51 @@ For a class demo, effectively yes — but here's the honest list so nothing surp
    and click **Run**. This creates the `enroll_submissions` table with insert-only security.
 3. Go to **Project Settings → API** and note three values:
    - **Project URL** → e.g. `https://abcdefgh.supabase.co`
-   - **anon public** key → goes in the frontend (public-safe)
+   - **anon public / publishable** key → goes in the frontend (public-safe with the insert-only policy)
    - **service_role** key → **secret**, stays on your PC only
 
-## Step 2 — Point the frontend at Supabase
+## Step 2 — Configure the Netlify site
 
-Edit `frontend/config.js`:
+The student app is now React + Vite + shadcn/ui. For a Git-connected Netlify site, open
+**Site configuration → Environment variables** and add:
 
-```js
-window.ENROLL_CONFIG = {
-  API_BASE: "",
-  EXAM: "CS101",                          // the demo exam (or leave "" and set it at sync)
-  SUPABASE_URL: "https://abcdefgh.supabase.co",
-  SUPABASE_ANON_KEY: "eyJ...the anon key...",
-};
+| Key | Value |
+| --- | --- |
+| `VITE_SUPABASE_URL` | your Project URL, e.g. `https://abcdefgh.supabase.co` |
+| `VITE_SUPABASE_ANON_KEY` | the **public anon / publishable** key |
+| `VITE_ENROLL_EXAM` | `CS101` (or leave unset and pass `--exam` at sync) |
+
+Never put the `service_role` or an `sb_secret_…` key in Netlify browser variables. The public key
+is safe here because the inbox policy is insert-only. Trigger a new deploy after changing variables.
+
+## Step 3 — Deploy the built app
+
+**Netlify, Git-connected (recommended):** the root [`netlify.toml`](../netlify.toml) builds from
+`frontend/` with `npm ci && npm run build` and publishes `frontend/dist` on Node 22. Push to the
+connected branch and let Netlify build. If old dashboard build settings conflict, clear the
+overrides so the committed file is used.
+
+**Netlify, drag & drop:** build first, then upload the output — not the source folder. From
+`frontend/` in PowerShell:
+
+```powershell
+npm ci
+npm run build
 ```
 
-Commit and push this change (the anon key is safe to commit — it's insert-only by design).
+For drag & drop without build-time environment variables, fill in `frontend/public/config.js`
+(`SUPABASE_URL`, `SUPABASE_ANON_KEY`, `EXAM`) before building. Then drag **`frontend/dist`** onto
+<https://app.netlify.com/drop>. Rebuild and re-upload `dist` after every change.
 
-## Step 3 — Host the frontend (free, always on)
-
-The page is pure static files, so any free static host works. Two easy options:
-
-**Cloudflare Pages (connects to your GitHub repo):**
-1. Cloudflare dashboard → **Workers & Pages → Create → Pages → Connect to Git**.
-2. Select this repo. Build settings: framework preset **None**, build command *(empty)*,
-   build output directory **`frontend`**.
-3. Deploy → you get `https://<project>.pages.dev`.
-
-**Netlify (drag & drop):** go to <https://app.netlify.com/drop> and drag the `frontend/` folder
-(with `config.js` already filled in). You get an HTTPS URL instantly.
+**Other static hosts:** run the same build and publish `frontend/dist`. Set the same `VITE_*`
+variables in the host's build environment.
 
 ## Step 4 — Share the link
 
-Send the URL to the group. Each member opens it on their phone, enters name + index number, and
-captures the 3 photos. They'll see **"Submitted! Queued for sync."** Their data is now safe in
-Supabase — your PC can be off.
+Send the URL to the group. The details form appears immediately; the camera is requested only
+after they continue. Each member enters name + index number and captures the 3 photos. They'll see
+**"Photos received — Awaiting organizer sync."** Their submission is in Supabase; they are not
+enrolled until you sync on your PC.
 
 ## Step 5 — Sync on your PC (when you're online)
 

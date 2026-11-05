@@ -1,5 +1,12 @@
-# Runs the FastAPI API + the student web app as ONE service.
-# Works on Hugging Face Spaces (Docker, port 7860), Render, Fly.io, or any Docker host.
+# Builds the shadcn/ui student app, then serves it with FastAPI as ONE service.
+# Works on Render, Fly.io, or any Docker host.
+FROM node:22-slim AS frontend-build
+WORKDIR /build
+COPY frontend/package.json frontend/package-lock.json ./
+RUN npm ci --no-audit --no-fund
+COPY frontend/ ./
+RUN npm run build
+
 FROM python:3.12-slim
 
 # OpenCV runtime libraries (insightface pulls opencv-python, which needs these).
@@ -33,9 +40,9 @@ ENV ENROLL_MODEL=${ENROLL_MODEL}
 RUN python -c "from insightface.app import FaceAnalysis; FaceAnalysis(name='${ENROLL_MODEL}', providers=['CPUExecutionProvider']).prepare(ctx_id=-1)" \
     && chmod -R a+rX /app/.insightface
 
-# Application code.
+# Application code + compiled frontend only (no source maps or node_modules in the image).
 COPY backend/ ./backend/
-COPY frontend/ ./frontend/
+COPY --from=frontend-build /build/dist ./frontend/dist
 
 # SQLite (default) writes here; make it writable for non-root runtimes (HF Spaces uid 1000).
 RUN mkdir -p /app/backend/data && chmod -R a+rwX /app/backend/data

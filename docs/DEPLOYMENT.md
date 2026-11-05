@@ -38,15 +38,23 @@ non-HTTPS exception (fine for testing on the same machine).
 
 ## Try it locally first (no hosting needed)
 
-From `backend/`:
+The backend serves the **compiled** frontend from `frontend/dist`. Build it once first. From the
+repository root in PowerShell:
 
 ```powershell
-uv run --extra vision uvicorn app.main:app --port 8000
+cd frontend
+npm ci
+npm run build
+cd ../backend
+uv run --frozen --extra vision uvicorn app.main:app --port 8000
 ```
 
 Open `http://localhost:8000/` — it redirects to the enrollment app at `/app`. On the same machine
 the camera works over `http://localhost`. To let *phones* reach it you need HTTPS, so use one of
-the hosting options below (or a tunnel).
+the hosting options below (or a tunnel). Docker builds the frontend automatically.
+
+For frontend-only development, run `npm run dev` in `frontend/` (Vite proxies API calls to
+`http://127.0.0.1:8000`; override with `BACKEND_ORIGIN`).
 
 ---
 
@@ -171,7 +179,8 @@ The `--model buffalo_s` is essential — it must match the server's `ENROLL_MODE
 This runs the real `buffalo_l` model on your PC and exposes it to phones over a free HTTPS tunnel.
 No RAM limits, no cold starts. Your PC must stay on while people enroll.
 
-1. Start the app (from `backend/`), pointing at Supabase if you want the data shared/persistent,
+1. Build the frontend once (`cd frontend`, `npm ci`, `npm run build`) as in the local section above.
+   Then start the app from `backend/`, pointing at Supabase if you want the data shared/persistent,
    or leave the default SQLite for a self-contained demo:
 
    ```powershell
@@ -228,15 +237,27 @@ No RAM limits, no cold starts. Your PC must stay on while people enroll.
 | `CORS_ORIGINS` | `*` | Comma-separated allowed browser origins, or `*`. Needed only if the frontend is hosted separately from the API. |
 | `PORT` | `7860` (Docker) | Port the server binds to. Render/Koyeb inject their own; the Dockerfile honors it. |
 
-## If you host the frontend separately (optional)
+## If you host the frontend separately (Netlify / static hosts)
 
-The simplest setup serves the page from the same FastAPI server (`/app`), so no CORS or extra
-hosting is needed. If you'd rather put the static page on Netlify/Vercel/Cloudflare Pages:
+The recommended separate host is the **hybrid Supabase inbox** — see
+[HYBRID_SYNC.md](HYBRID_SYNC.md). Netlify then needs no face model and no running API.
 
-1. Upload the `frontend/` folder.
-2. Edit `frontend/config.js`: set `API_BASE` to your backend URL (e.g.
-   `https://<name>.onrender.com`) and optionally `EXAM`.
-3. Set `CORS_ORIGINS` on the backend to the frontend's origin (or leave `*` for a demo).
+**Git-connected Netlify:** the root `netlify.toml` builds `frontend/` (`npm ci && npm run build`)
+and publishes `dist` on Node 22. Set `VITE_SUPABASE_URL`, `VITE_SUPABASE_ANON_KEY` (public
+anon/publishable only), and optionally `VITE_ENROLL_EXAM` in the site's environment variables, then
+deploy. Do not upload the source folder as a static site.
+
+**Drag & drop:** run `npm ci` and `npm run build` in `frontend/`, then upload **`frontend/dist`**.
+Without build-time variables, fill in `frontend/public/config.js` before building; it is copied to
+`dist/config.js` as an optional runtime override.
+
+**Direct API mode instead of the inbox:** leave the Supabase variables empty and set
+`VITE_API_BASE` to your backend URL (e.g. `https://<name>.onrender.com`), plus `VITE_ENROLL_EXAM`
+if wanted. Set `CORS_ORIGINS` on the backend to the frontend origin. The backend must stay awake
+and have enough RAM for the enrollment model, so this is not the recommended free Netlify setup.
+
+After changing environment variables, trigger a new Netlify deploy. If the page still shows the
+old spinner, check that the latest deploy published the built `dist` and clear the browser cache.
 
 ## Caveats checklist before the demo
 

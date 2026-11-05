@@ -102,3 +102,25 @@ Paste just the lines inside the code blocks. Pasting the surrounding prose into 
 
 The first run downloads the InsightFace weights (a few hundred MB) — that's normal. A
 `FutureWarning` from `SimilarityTransform` is harmless upstream noise; ignore it.
+
+## Netlify enrollment page is stuck on a spinner / shows the old design
+
+The frontend is now a built React + shadcn/ui app. The details form must appear immediately; there
+is no startup overlay. If you still see the old spinner:
+
+1. Confirm the latest commit is deployed. Git-connected sites use the root `netlify.toml`
+   (`frontend` base, `npm ci && npm run build`, `dist` publish, Node 22).
+2. For drag & drop, upload **`frontend/dist` after running `npm ci` and `npm run build`** — never
+   the unbuilt `frontend/` source folder.
+3. Set `VITE_SUPABASE_URL`, `VITE_SUPABASE_ANON_KEY` (public key only), and `VITE_ENROLL_EXAM` in
+   Netlify environment variables, then redeploy. See [HYBRID_SYNC.md](HYBRID_SYNC.md).
+4. Hard-refresh the page (or open a private window) to drop the cached old bundle.
+
+If submitting says the enrollment service was not found, the site is in direct-API mode without a
+backend. Use the Supabase inbox variables above for Netlify.
+
+## Camera unavailable on the phone
+
+Use the **https://** URL, allow camera access in the browser's site settings, and close other apps
+using the camera. The page has a **Try again** button in the camera card; it never blocks the
+initial details form while waiting for permission.

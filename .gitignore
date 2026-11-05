@@ -7,6 +7,8 @@ __pycache__/
 # Frontend
 node_modules/
 .next/
+frontend/dist/
+frontend/.vite/
 
 # Local databases and generated model files
 *.db
@@ -16,6 +18,8 @@ backend/data/*.db
 # Secrets and local env
 .env
 .env.*
+!.env.example
+!frontend/.env.example
 
 # Real probe photos for accuracy tests (biometric data; keep local)
 backend/data/probes/

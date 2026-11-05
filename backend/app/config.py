@@ -3,8 +3,8 @@ from pathlib import Path
 
 BASE_DIR = Path(__file__).resolve().parent.parent
 DATA_DIR = BASE_DIR / "data"
-# The student-facing web app lives at the repository root, next to backend/.
-FRONTEND_DIR = BASE_DIR.parent / "frontend"
+# Serve the compiled Vite app (frontend/dist), not the React source tree.
+FRONTEND_DIR = Path(os.environ.get("FRONTEND_DIR", BASE_DIR.parent / "frontend" / "dist"))
 
 DATABASE_URL = os.getenv("DATABASE_URL", f"sqlite:///{DATA_DIR / 'exam_attendance.db'}")
 

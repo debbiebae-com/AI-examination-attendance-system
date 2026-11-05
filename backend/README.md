@@ -119,15 +119,24 @@ uv run python -m app.register --exam CS101 --list
 
 ## Web enrollment (phones)
 
-The student-facing web app (`frontend/`, served at `/app`) lets group members enroll from their
-phones: they enter their **name + index number**, then capture 3 photos (look straight, turn left,
-turn right). The backend computes the face embeddings with the same model used for attendance and
-stores them. No desktop capture needed for these volunteers.
+The student-facing app (`frontend/`, React + Vite + shadcn/ui, served at `/app`) lets group members
+enroll from their phones: they enter their **name + index number**, then capture 3 photos (look
+straight, turn left, turn right). The backend computes the face embeddings with the same model used
+for attendance and stores them. No desktop capture needed for these volunteers.
+
+Build the frontend once before serving it locally (from the repository root):
 
 ```bash
-uv run --extra vision uvicorn app.main:app --host 0.0.0.0 --port 8000
+cd frontend
+npm ci
+npm run build
+cd ../backend
+uv run --frozen --extra vision uvicorn app.main:app --host 0.0.0.0 --port 8000
 # open http://localhost:8000/  -> redirects to the enrollment app at /app
 ```
+
+The backend serves `frontend/dist`, not the React source. Docker and Netlify build it for you.
+For frontend development, `npm run dev` in `frontend/` proxies API calls to the backend.
 
 - `POST /enroll` accepts `{full_name, student_no, photos:[{step, image(base64)}], exam?}`. Each photo
   must contain exactly one face; at least one usable photo is required (3 gives the best matching).
