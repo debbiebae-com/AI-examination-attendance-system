@@ -16,3 +16,6 @@ backend/data/*.db
 # Secrets and local env
 .env
 .env.*
+
+# Real probe photos for accuracy tests (biometric data; keep local)
+backend/data/probes/

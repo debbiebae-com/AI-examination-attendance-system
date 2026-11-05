@@ -70,6 +70,24 @@ Notes on the vision dependencies:
 - The extra uses InsightFace 2.1, which installs from a pre-built wheel. InsightFace 0.7.3 must compile C++ code, which needs Microsoft's C++ Build Tools on Windows.
 - Model weights are for non-commercial research use only (see the project's licensing note).
 
+## Accuracy test on real photos
+
+The demo photos are AI-generated and can't show how well matching separates people. Use real photos from consenting volunteers instead. Keep them on your PC: they're biometric data and `backend/data/probes/` is excluded from Git.
+
+Create the folders by running the evaluator once:
+
+```bash
+uv run --extra vision python -m app.vision.evaluate
+```
+
+Then fill them in:
+
+- `data/probes/reference/<Name>.jpg`: one clear photo per enrolled volunteer. The file name is the label.
+- `data/probes/genuine/<Name>/*.jpg`: 3 to 4 other photos of the same volunteer, with different lighting, angles, and glasses.
+- `data/probes/strangers/*.jpg`: photos of people who are not enrolled.
+
+Run it again. It prints each photo's outcome and a threshold sweep, showing how often enrolled people are accepted and how often strangers are wrongly accepted.
+
 ## Notes
 
 - Attendance times are stored as UTC. Ghana (Accra) is UTC+0 year-round, so no conversion is needed for display.
