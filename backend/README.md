@@ -4,6 +4,8 @@ FastAPI + SQLAlchemy + SQLite. Managed with `uv`.
 
 ## Setup
 
+The project uses Python 3.12 (pinned in `.python-version`). Python 3.15 has no `onnxruntime` build yet.
+
 ```bash
 cd backend
 uv sync                      # creates .venv and installs dependencies
@@ -51,8 +53,10 @@ On your PC, from `backend/`:
 
 ```bash
 uv sync --extra vision
-uv run python -m app.vision.spike
+uv run --extra vision python -m app.vision.spike
 ```
+
+Always add `--extra vision` to `uv run` for vision commands. A plain `uv run` re-syncs the environment to the default packages and removes InsightFace and OpenCV.
 
 The first run downloads `buffalo_l` (about 300 MB) from GitHub to `~/.insightface`. The spike then:
 
