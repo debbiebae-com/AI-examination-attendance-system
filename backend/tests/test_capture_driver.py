@@ -60,17 +60,15 @@ def test_multiple_and_zero_faces():
 def test_overlay_draws_without_error_for_every_step():
     import cv2
 
-    for target_yaw, step in [(0, "straight"), (30, "left"), (-30, "right"), (0, "blink")]:
+    for target_yaw, step in [(0, "straight"), (30, "left"), (-30, "right")]:
         seq = CaptureSequence(gap_frames=0)
         # Drive the sequence to the desired step.
         from tests.test_capture_flow import advance
 
-        if step in ("left", "right", "blink"):
+        if step in ("left", "right"):
             advance(seq, yaw=0)
-        if step in ("right", "blink"):
+        if step == "right":
             advance(seq, yaw=30)
-        if step == "blink":
-            advance(seq, yaw=-30)
         image = np.zeros(SHAPE, dtype=np.uint8)
         signal = FrameSignal(face_count=1, det_score=0.9, yaw=target_yaw, eye_ratio=0.3)
         for mirrored in (True, False):

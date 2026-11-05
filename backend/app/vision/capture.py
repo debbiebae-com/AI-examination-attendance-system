@@ -1,4 +1,4 @@
-"""Guided face capture for one person: look straight, turn left, turn right, blink.
+"""Guided face capture for one person: look straight, turn left, turn right.
 
 Runs in a window on the PC with the webcam. Each accepted frame is stored as a face
 embedding for the student, replacing any earlier capture for that student.
@@ -12,8 +12,9 @@ Designed for a smooth, low-retry experience:
   liveness check run on a worker thread for the few kept frames, so the preview stays fast.
 * A background camera reader always shows the newest frame (no stale-frame lag), and an
   FPS readout is shown live.
-* Blink thresholds are calibrated from the person's own open eyes, and the passive
-  liveness vote is aggregated over the whole capture instead of rejecting single frames.
+* Liveness comes from the turn challenge (a photo or screen cannot turn its head) plus
+  the passive liveness model, whose vote is aggregated over the whole capture instead of
+  rejecting single frames. There is no blink step.
 
 Run from backend/ after installing the vision extra:
 
@@ -224,9 +225,6 @@ def draw_overlay(image, faces, sequence, message, signal, fps, mirrored, flash):
         direction = left_dir if step == "left" else -left_dir
         label = "YOUR LEFT" if step == "left" else "YOUR RIGHT"
         _draw_arrow(image, direction, h // 2, label)
-
-    if step == "blink" and signal.eye_ratio is not None:
-        cv2.putText(image, f"eyes {signal.eye_ratio:.2f}", (16, h - 70), FONT, 0.6, DIM, 1, cv2.LINE_AA)
 
     mirror_hint = "mirror: on" if mirrored else "mirror: off"
     cv2.putText(image, f"{mirror_hint}  (m to flip)", (16, h - 16), FONT, 0.5, DIM, 1, cv2.LINE_AA)

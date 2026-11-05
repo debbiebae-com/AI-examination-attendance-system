@@ -72,7 +72,7 @@ Notes on the vision dependencies:
 
 ## Guided capture (desktop, with liveness)
 
-This is the Instagram-style enrollment: a window shows the camera with prompts. It asks the person to look straight, turn left, turn right, and blink. Only frames that match each prompt are kept, and a photo or screen is refused by the liveness check.
+This is the Instagram-style enrollment: a window shows the camera with prompts. It asks the person to look straight, then turn left, then turn right. Only frames that match each prompt are kept, and a photo or screen is refused by the liveness check.
 
 ```bash
 uv run --extra vision python -m app.vision.capture --student-no VOL-001 --name "Ama Mensah" --exam CS101
@@ -87,8 +87,8 @@ It is built for a smooth, low-retry experience:
 
 - **Left/right always match the person.** The preview is mirrored (selfie-style) and head angles are converted to *person space*, so "turn to your LEFT" means the person's own left. On-screen arrows point the right way, a yaw gauge shows the target zone, and turning the wrong way gets an explicit correction ("That's your RIGHT. Turn to your LEFT"). There is no sign flag to get wrong. If left/right ever feels inverted (some phone-as-webcam apps already mirror their feed), press **`m`** in the window to flip the mirror — no restart needed.
 - **Fast preview.** Each camera frame runs only the cheap detector + landmarks. The heavy face embedding and liveness check run on a worker thread for the few kept frames, and a background camera reader always shows the newest frame (no stale-frame lag). A live `fps` readout is shown top-right.
-- **Fewer retries.** The head angle is smoothed, blink thresholds are calibrated from the person's own open eyes (so small- or wide-eyed people both work), and gentle "move closer / back / center" guidance keeps the face usable.
-- **Liveness is aggregated.** The turn + blink challenge is the active liveness proof. The passive liveness model votes on each kept frame, and a clear majority of live votes passes the capture, instead of one noisy frame rejecting it. If the majority is not live, nothing is saved.
+- **Fewer retries.** The head angle is smoothed and gentle "move closer / back / center" guidance keeps the face usable. There is no blink step.
+- **Liveness is aggregated.** The turn challenge is the active liveness proof (a photo or screen cannot turn its head). The passive liveness model votes on each kept frame, and a clear majority of live votes passes the capture, instead of one noisy frame rejecting it. If the majority is not live, nothing is saved.
 
 Options:
 
@@ -98,7 +98,7 @@ Options:
 - `--threads N` onnxruntime CPU threads, if you want to cap CPU use.
 - `--samples 3` frames kept per straight/turn step.
 
-Tuning constants live in `app/vision/capture_flow.py`: `TURN_MIN_DEG`, `STRAIGHT_MAX_DEG` (turn angles), and the blink ratios `BLINK_CLOSED_RATIO` / `BLINK_OPEN_RATIO`. The live `eyes` value is shown during the blink step.
+Tuning constants live in `app/vision/capture_flow.py`: `TURN_MIN_DEG` and `STRAIGHT_MAX_DEG` (turn angles).
 
 Liveness uses InsightFace's optional add-on model (`liveness.onnx`, about 1.5 MB). The first run downloads it to `~/.insightface/addons`. The model's license is the same non-commercial research terms as `buffalo_l`.
 

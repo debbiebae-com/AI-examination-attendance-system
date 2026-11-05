@@ -62,35 +62,32 @@ def run_capture(poses, *, live=True, mirrored=True, gap_frames=0):
     return sequence, samples, problems, live_ok, live_message
 
 
-def straight_left_right_blink():
+def straight_left_right():
     # Mirrored feed: person's left = negative image yaw. Hold each pose long enough for
     # the smoothed angle to settle and the required samples to be kept.
     yield from [(0.0, 0.3)] * 8  # straight
     yield from [(-30.0, 0.3)] * 12  # turn to own left
     yield from [(30.0, 0.3)] * 12  # turn to own right
-    yield from [(0.0, 0.3)] * 3  # face forward, eyes open
-    yield from [(0.0, 0.03)] * 2  # blink closed
-    yield from [(0.0, 0.3)] * 3  # open again
 
 
 def test_full_capture_produces_savable_samples(session):
-    sequence, samples, problems, live_ok, _ = run_capture(list(straight_left_right_blink()))
+    sequence, samples, problems, live_ok, _ = run_capture(list(straight_left_right()))
     assert sequence.done
     assert not problems
     assert live_ok
     assert missing_steps(samples) == []
-    assert len(samples) == 10  # 3 + 3 + 3 + 1
+    assert len(samples) == 9  # 3 + 3 + 3
 
     student = session.scalar(select(Student).where(Student.student_no == "UGS-26-001"))
     save_capture_samples(session, student.id, samples)
     rows = session.scalars(select(FaceEmbedding).where(FaceEmbedding.student_id == student.id)).all()
-    assert len(rows) == 10
+    assert len(rows) == 9
     assert all(row.source_photo.startswith("capture:") for row in rows)
 
 
 def test_capture_with_dead_liveness_is_refused(session):
     sequence, samples, problems, live_ok, live_message = run_capture(
-        list(straight_left_right_blink()), live=False
+        list(straight_left_right()), live=False
     )
     assert sequence.done
     assert not problems  # embeddings still computed in observe mode
@@ -100,8 +97,8 @@ def test_capture_with_dead_liveness_is_refused(session):
 
 def test_unmirrored_feed_also_completes():
     # Same physical movements, but the feed is not mirrored: image yaw signs are flipped.
-    poses = [(-y, e) for (y, e) in straight_left_right_blink()]
+    poses = [(-y, e) for (y, e) in straight_left_right()]
     sequence, samples, problems, live_ok, _ = run_capture(poses, mirrored=False)
     assert sequence.done
     assert not problems and live_ok
-    assert len(samples) == 10
+    assert len(samples) == 9

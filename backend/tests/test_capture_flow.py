@@ -36,9 +36,6 @@ def run_full_sequence(seq: CaptureSequence) -> None:
     advance(seq, yaw=0)  # straight (person space)
     advance(seq, yaw=30)  # left: positive yaw is the person's own left
     advance(seq, yaw=-30)  # right
-    seq.process(frame(eye=0.3))  # eyes open, waiting for the blink
-    seq.process(frame(eye=0.03))  # eyes closed
-    seq.process(frame(eye=0.3))  # eyes open again: blink complete
 
 
 def sample(step, index, seed):
@@ -71,8 +68,8 @@ def test_full_sequence_completes_and_collects_samples():
     seq = CaptureSequence(gap_frames=0)
     run_full_sequence(seq)
     assert seq.done
-    assert len(seq.accepted_frames) == 3 + 3 + 3 + 1
-    assert [f.step for f in seq.accepted_frames] == ["straight"] * 3 + ["left"] * 3 + ["right"] * 3 + ["blink"]
+    assert len(seq.accepted_frames) == 3 + 3 + 3
+    assert [f.step for f in seq.accepted_frames] == ["straight"] * 3 + ["left"] * 3 + ["right"] * 3
 
 
 def test_left_is_positive_person_space_yaw():
@@ -131,56 +128,31 @@ def test_face_too_small_or_off_center_gets_guidance():
     assert seq.progress("straight") == (0, 3)
 
 
-# -- blink -----------------------------------------------------------------
+# -- no blink step ---------------------------------------------------------
 
 
-def test_blink_requires_eyes_to_close_and_reopen():
+def test_there_is_no_blink_step():
+    from app.vision.capture_flow import STEPS
+
+    assert "blink" not in STEPS
+    assert STEPS == ("straight", "left", "right")
+
+
+def test_sequence_completes_after_right_turn():
     seq = CaptureSequence(gap_frames=0)
     advance(seq, yaw=0)
     advance(seq, yaw=30)
+    assert not seq.done
     advance(seq, yaw=-30)
-    assert seq.current_step == "blink"
-
-    seq.process(frame(eye=0.3))
-    seq.process(frame(eye=0.32))
-    assert seq.current_step == "blink"  # staying open is not a blink
-
-    seq.process(frame(eye=0.03))
-    seq.process(frame(eye=0.3))
-    assert seq.done
+    assert seq.done  # nothing left to do after the right turn
 
 
-def test_blink_calibrates_for_small_eyes():
-    # A person whose OPEN eyes read only 0.16 (below the old fixed closed threshold).
+def test_closed_eyes_reference_frame_is_skipped():
     seq = CaptureSequence(gap_frames=0)
-    advance(seq, yaw=0, eye=0.16)
-    advance(seq, yaw=30, eye=0.16)
-    advance(seq, yaw=-30, eye=0.16)
-    assert seq.current_step == "blink"
-    assert seq.eye_baseline is not None and seq.eye_baseline < 0.19
-
-    # Their normal open eyes must NOT be mistaken for a blink.
-    seq.process(frame(eye=0.16))
-    assert seq.current_step == "blink"
-    # A real close then reopen completes it.
-    seq.process(frame(eye=0.03))
-    seq.process(frame(eye=0.16))
-    assert seq.done
-
-
-def test_blink_calibrates_for_large_eyes():
-    seq = CaptureSequence(gap_frames=0)
-    advance(seq, yaw=0, eye=0.36)
-    advance(seq, yaw=30, eye=0.36)
-    advance(seq, yaw=-30, eye=0.36)
-    assert seq.current_step == "blink"
-    # A shallow dip is not a full blink for someone with wide-open eyes.
-    seq.process(frame(eye=0.24))
-    seq.process(frame(eye=0.36))
-    assert seq.current_step == "blink"
-    seq.process(frame(eye=0.05))
-    seq.process(frame(eye=0.36))
-    assert seq.done
+    verdict = seq.process(frame(yaw=0, eye=0.01))  # fully closed eyes
+    assert verdict.message == "Open your eyes"
+    assert verdict.accepted is None
+    assert seq.progress("straight") == (0, 3)
 
 
 # -- smoothing and spacing -------------------------------------------------
@@ -223,7 +195,7 @@ def test_liveness_summary_fails_when_nothing_scored():
 
 
 def test_missing_steps_reports_absent_poses():
-    samples = [sample("straight", 0, 1), sample("left", 0, 2), sample("blink", 0, 3)]
+    samples = [sample("straight", 0, 1), sample("left", 0, 2)]
     assert missing_steps(samples) == ["right"]
 
 

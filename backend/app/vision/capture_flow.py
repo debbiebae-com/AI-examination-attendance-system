@@ -1,4 +1,4 @@
-"""Guided face capture: prompts (look straight, turn left, turn right, blink) that keep only good frames.
+"""Guided face capture: prompts (look straight, turn left, turn right) that keep only good frames.
 
 This is pure logic with no camera or model dependency, so it is unit tested. capture.py drives it.
 
@@ -10,19 +10,21 @@ Conventions
 * Acceptance is based on pose and image quality only. The heavy face embedding and the
   passive liveness check run on the few kept frames, not on every camera frame, and the
   liveness verdict is aggregated over the whole capture (see ``liveness_summary``).
+
+Liveness comes from the turn challenge (a photo or screen cannot turn its head) plus the
+passive liveness model. There is no blink step.
 """
 
 from collections import Counter
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 
 import numpy as np
 
-STEPS = ("straight", "left", "right", "blink")
+STEPS = ("straight", "left", "right")
 PROMPTS = {
     "straight": "Look straight at the camera",
     "left": "Slowly turn your head to your LEFT",
     "right": "Slowly turn your head to your RIGHT",
-    "blink": "Blink once, then open your eyes",
 }
 
 # Pose windows (degrees, person space). Generous on purpose: the challenge-response
@@ -43,16 +45,7 @@ DEFAULT_SAMPLES = 3  # frames kept for each turn or straight step
 DEFAULT_GAP_FRAMES = 6  # minimum frames between kept samples, so one pose is not stored many times
 YAW_EMA_ALPHA = 0.4  # smoothing for the head angle, so a single noisy frame does not stall a step
 
-# Blink detection is calibrated per person from their own open-eye baseline measured
-# during the "straight" step. People differ a lot (glasses, eye shape, camera angle),
-# so fixed thresholds made many volunteers retry. These ratios adapt automatically.
-BLINK_CLOSED_RATIO = 0.6  # closed threshold = baseline * this
-BLINK_OPEN_RATIO = 0.8  # re-open threshold = baseline * this
-EYE_CLOSED_FALLBACK = 0.19  # used until a baseline is available
-EYE_OPEN_FALLBACK = 0.24
-EYE_FLOOR = 0.05  # absolute "fully closed" floor, person-independent
-MIN_CALIB_SAMPLES = 3
-MAX_CALIB_SAMPLES = 90
+EYE_FLOOR = 0.05  # absolute "fully closed" floor; skip closed-eye reference frames (person-independent)
 
 
 def eye_aspect_ratio(eye: np.ndarray) -> float:
@@ -138,8 +131,8 @@ class CaptureSequence:
     """Walks one person through the prompts and decides which frames to keep.
 
     Yaw arrives in person space (positive = the person's own left), so there is no
-    camera-sign flag to get wrong. Head angle is smoothed, and the blink thresholds
-    are calibrated from the person's own open-eye baseline.
+    camera-sign flag to get wrong. The head angle is smoothed so a single noisy frame
+    does not stall a step.
     """
 
     def __init__(
@@ -152,15 +145,11 @@ class CaptureSequence:
             raise ValueError("samples_per_step must be at least 1")
         self.gap_frames = gap_frames
         self.needed = {step: samples_per_step for step in STEPS}
-        self.needed["blink"] = 1
         self.accepted_frames: list[AcceptedFrame] = []
         self._step_index = 0
         self._counts = {step: 0 for step in STEPS}
         self._frames_since_keep = gap_frames
-        self._blink_closed_seen = False
         self._yaw_ema: float | None = None
-        self._calib: list[float] = []
-        self.eye_baseline: float | None = None
 
     @property
     def current_step(self) -> str | None:
@@ -176,29 +165,6 @@ class CaptureSequence:
 
     def progress(self, step: str) -> tuple[int, int]:
         return self._counts[step], self.needed[step]
-
-    # -- blink calibration -------------------------------------------------
-
-    def _blink_thresholds(self) -> tuple[float, float]:
-        if self.eye_baseline is None:
-            return EYE_CLOSED_FALLBACK, EYE_OPEN_FALLBACK
-        closed = max(0.08, min(0.24, self.eye_baseline * BLINK_CLOSED_RATIO))
-        open_ = max(closed + 0.04, min(0.32, self.eye_baseline * BLINK_OPEN_RATIO))
-        return closed, open_
-
-    def _maybe_calibrate(self, signal: FrameSignal, yaw: float) -> None:
-        if self.current_step != "straight" or signal.eye_ratio is None:
-            return
-        # Collect any frontal, not-fully-closed frame. Using the absolute floor (not the
-        # fallback closed threshold) lets small-eyed people calibrate too.
-        if abs(yaw) > STRAIGHT_MAX_DEG or signal.eye_ratio <= EYE_FLOOR:
-            return
-        if len(self._calib) < MAX_CALIB_SAMPLES:
-            self._calib.append(signal.eye_ratio)
-        if len(self._calib) >= MIN_CALIB_SAMPLES:
-            self.eye_baseline = float(np.median(self._calib))
-
-    # -- main loop ---------------------------------------------------------
 
     def process(self, signal: FrameSignal) -> Verdict:
         """Process one frame. Returns guidance and, when a frame is kept, the step it belongs to."""
@@ -216,10 +182,6 @@ class CaptureSequence:
                 signal.yaw if self._yaw_ema is None else YAW_EMA_ALPHA * signal.yaw + (1 - YAW_EMA_ALPHA) * self._yaw_ema
             )
         yaw = self._yaw_ema
-        self._maybe_calibrate(signal, yaw if yaw is not None else 0.0)
-
-        if step == "blink":
-            return self._process_blink(signal, yaw)
 
         if yaw is None:
             return Verdict("Head angle not available. Improve the light")
@@ -244,21 +206,6 @@ class CaptureSequence:
             return Verdict("")
         return Verdict("", accepted=self._keep(step, signal))
 
-    def _process_blink(self, signal: FrameSignal, yaw: float | None) -> Verdict:
-        if signal.eye_ratio is None:
-            return Verdict("Eyes not visible. Improve the light")
-        closed, open_ = self._blink_thresholds()
-        if not self._blink_closed_seen:
-            if signal.eye_ratio <= closed:
-                self._blink_closed_seen = True
-                return Verdict("Now open your eyes")
-            return Verdict(PROMPTS["blink"])
-        if signal.eye_ratio >= open_:
-            if yaw is not None and abs(yaw) > STRAIGHT_MAX_DEG:
-                return Verdict("Face the camera and open your eyes")
-            return Verdict("", accepted=self._keep("blink", signal))
-        return Verdict("Open your eyes")
-
     def _keep(self, step: str, signal: FrameSignal) -> str:
         index = self._counts[step]
         self.accepted_frames.append(AcceptedFrame(step, index, signal.det_score))
@@ -266,7 +213,6 @@ class CaptureSequence:
         self._frames_since_keep = 0
         if self._counts[step] >= self.needed[step]:
             self._step_index += 1
-            self._blink_closed_seen = False
         return step
 
 
@@ -276,9 +222,9 @@ class CaptureSequence:
 def liveness_summary(flags: list[bool | None]) -> tuple[bool, str]:
     """Aggregate the passive liveness votes over the kept frames.
 
-    The challenge-response (turn + blink) is the active liveness proof; the passive
-    model is noisy frame to frame, so a clear majority of live votes passes the
-    capture instead of requiring every single frame to be live.
+    The turn challenge is the active liveness proof; the passive model is noisy frame
+    to frame, so a clear majority of live votes passes the capture instead of requiring
+    every single frame to be live.
     """
     scored = [flag for flag in flags if flag is not None]
     if not scored:
