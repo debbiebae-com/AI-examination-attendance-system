@@ -4,9 +4,13 @@ Run from backend/ on the PC with the webcam, after installing the vision extra:
 
     uv run --extra vision python -m app.vision.attend --exam CS101
 
-Each face must match the same student for a few frames in a row and pass the liveness check
-before attendance is recorded. Students who aren't registered for the exam are shown, but not
-recorded. Several faces can be recognised at once. Press q to stop.
+Each face must match the same student for a few frames in a row before attendance is
+recorded. Students who aren't registered for the exam (or fail eligibility) are shown, but
+not recorded. Several faces can be recognised at once. Press q to stop.
+
+The passive liveness model is OFF by default (it is unreliable on some cameras). Enable it
+with --liveness. A background camera reader keeps the preview on the newest frame, and a live
+FPS readout is shown.
 """
 
 import argparse
@@ -19,6 +23,7 @@ from app.attendance import NotEligible, mark_attendance
 from app.db import SessionLocal, engine
 from app.models import Base, Exam, Student
 from app.vision.attendance_flow import CONFIRM_FRAMES, AttendanceDecider, FaceTracker
+from app.vision.camera import CameraReader, FpsMeter
 from app.vision.embedder import DetectedFace, InsightFaceEmbedder
 from app.vision.gallery import load_matcher
 from app.vision.matcher import DEFAULT_MARGIN, DEFAULT_THRESHOLD
@@ -72,7 +77,7 @@ def record(
     print(events[-1])
 
 
-def draw(image, faces: list[DetectedFace], ids: list[int], tracker: FaceTracker, decider: AttendanceDecider, names: dict[str, str], events: list[str]) -> None:
+def draw(image, faces: list[DetectedFace], ids: list[int], tracker: FaceTracker, decider: AttendanceDecider, names: dict[str, str], events: list[str], fps: float = 0.0) -> None:
     for face, tid in zip(faces, ids):
         track = tracker.track(tid)
         x1, y1, x2, y2 = (int(v) for v in face.bbox)
@@ -82,7 +87,8 @@ def draw(image, faces: list[DetectedFace], ids: list[int], tracker: FaceTracker,
         cv2.rectangle(image, (x1, y1), (x2, y2), colour, 2)
         cv2.putText(image, label, (x1, max(20, y1 - 10)), FONT, 0.6, colour, 2)
 
-    height = image.shape[0]
+    height, width = image.shape[:2]
+    cv2.putText(image, f"{fps:4.1f} fps", (width - 110, 30), FONT, 0.6, (200, 200, 200), 1, cv2.LINE_AA)
     for i, line in enumerate(events[-MAX_EVENTS_SHOWN:]):
         cv2.putText(image, line, (20, height - 20 - 26 * (MAX_EVENTS_SHOWN - 1 - i)), FONT, 0.55, (255, 255, 255), 2)
 
@@ -94,6 +100,13 @@ def main() -> None:
     parser.add_argument("--threshold", type=float, default=DEFAULT_THRESHOLD)
     parser.add_argument("--margin", type=float, default=DEFAULT_MARGIN)
     parser.add_argument("--confirm", type=int, default=CONFIRM_FRAMES, help="frames a match must hold")
+    parser.add_argument("--det-size", type=int, default=640, help="detector resolution (lower = faster, may miss distant faces)")
+    parser.add_argument("--threads", type=int, default=None, help="onnxruntime CPU threads")
+    parser.add_argument(
+        "--liveness",
+        action="store_true",
+        help="enable the passive liveness model (off by default; it is unreliable on some cameras)",
+    )
     args = parser.parse_args()
 
     Base.metadata.create_all(engine)
@@ -110,22 +123,40 @@ def main() -> None:
         raise SystemExit("No enrolled faces found. Run the capture or photo enrollment first.")
 
     print(f"Exam {args.exam}: {exam_title}. {len(matcher)} face samples loaded.")
-    print("Loading InsightFace with the liveness check...")
-    embedder = InsightFaceEmbedder(liveness=True)
+    print("Loading InsightFace...")
+    if args.liveness:
+        print("Passive liveness check: ON")
+    else:
+        print("Passive liveness check: OFF (recognition only)")
+    embedder = InsightFaceEmbedder(
+        liveness=args.liveness, det_size=(args.det_size, args.det_size), threads=args.threads
+    )
 
     tracker = FaceTracker()
     decider = AttendanceDecider(tracker, confirm_frames=args.confirm)
     camera = cv2.VideoCapture(args.camera)
     if not camera.isOpened():
         raise SystemExit(f"Cannot open camera {args.camera}. Try --camera 1.")
+    try:
+        camera.set(cv2.CAP_PROP_BUFFERSIZE, 1)
+    except Exception:
+        pass
 
+    reader = CameraReader(camera).start()
+    fps_meter = FpsMeter()
+    last_seq = -1
     events: list[str] = []
     try:
         while True:
-            ok, image = camera.read()
-            if not ok:
-                raise SystemExit("The camera stopped sending frames.")
-            image = cv2.flip(image, 1)
+            if reader.error:
+                raise SystemExit(reader.error)
+            seq_id, frame = reader.read()
+            if frame is None or seq_id == last_seq:
+                if cv2.waitKey(5) & 0xFF == ord("q"):
+                    break
+                continue
+            last_seq = seq_id
+            image = cv2.flip(frame, 1)
 
             faces = embedder.analyse(image)
             ids = tracker.update([tuple(face.bbox) for face in faces])
@@ -146,12 +177,13 @@ def main() -> None:
                         events=events,
                     )
 
-            draw(image, faces, ids, tracker, decider, names, events)
+            draw(image, faces, ids, tracker, decider, names, events, fps_meter.fps)
             cv2.imshow(WINDOW, image)
+            fps_meter.tick()
             if cv2.waitKey(1) & 0xFF == ord("q"):
                 break
     finally:
-        camera.release()
+        reader.stop()
         cv2.destroyAllWindows()
 
     present = sum(1 for line in events if "marked present" in line)

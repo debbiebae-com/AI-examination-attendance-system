@@ -103,6 +103,17 @@ Tuning constants live in `app/vision/capture_flow.py`: `TURN_MIN_DEG` and `STRAI
 
 When `--liveness` is used, the passive check uses InsightFace's optional add-on model (`liveness.onnx`, about 1.5 MB), downloaded on first use to `~/.insightface/addons`. The model's license is the same non-commercial research terms as `buffalo_l`. Without `--liveness`, the add-on is not loaded at all.
 
+## Registering students for an exam
+
+A student is only recorded as present if they are **enrolled** (have face samples), **registered for the exam**, fees cleared, and not suspended. Capture with `--exam` registers automatically. To register or check afterwards without re-running capture:
+
+```bash
+uv run python -m app.register --exam CS101 --student-no VOL-001 VOL-002 VOL-003
+uv run python -m app.register --exam CS101 --list
+```
+
+`--list` prints a table of everyone registered or enrolled, showing their registration, face-sample count, and eligibility — so you can confirm the volunteers are ready before running attendance.
+
 ## Live attendance (desktop)
 
 This recognises enrolled students in the camera view and records them as present for an exam:
@@ -111,13 +122,19 @@ This recognises enrolled students in the camera view and records them as present
 uv run --extra vision python -m app.vision.attend --exam CS101
 ```
 
-- Each face must match the same student for 3 frames in a row, and pass the liveness check, before attendance is recorded.
+- Each face must match the same student for 3 frames in a row before attendance is recorded.
 - Several students can be recognised at once. Each face is tracked from frame to frame.
-- Students who aren't registered for the exam are shown in red and not recorded.
+- Students who aren't registered for the exam (or fail eligibility) are shown in red and not recorded.
 - Students already marked for the exam show as "already marked". The database blocks duplicates.
+- A background camera reader keeps the preview on the newest frame, with a live `fps` readout.
 - Press `q` to stop.
 
-The matching threshold and margin can be changed with `--threshold` and `--margin`. Use the accuracy test to choose them.
+Options:
+
+- The passive liveness model is **off by default** (unreliable on some cameras). Add `--liveness` to require it; then a face must also pass liveness before being recorded.
+- `--det-size 640` detector resolution. Lower (e.g. 480 or 320) is faster but may miss distant faces.
+- `--threads N` onnxruntime CPU threads.
+- `--threshold` and `--margin` tune matching (see the accuracy test below). `--confirm` sets how many frames a match must hold.
 
 ## Accuracy test on real photos
 
