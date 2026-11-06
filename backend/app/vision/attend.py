@@ -16,6 +16,7 @@ FPS readout is shown.
 import argparse
 from datetime import datetime
 from time import perf_counter
+from pathlib import Path
 
 import cv2
 from sqlalchemy import select
@@ -104,6 +105,7 @@ def draw(image, faces: list[DetectedFace], ids: list[int | None], tracker: FaceT
 
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
+    parser.add_argument("--stop-file", type=Path, help="local dashboard cooperative stop signal")
     parser.add_argument("--exam", required=True, help="course code, e.g. CS101")
     parser.add_argument("--camera", type=int, default=0)
     parser.add_argument("--threshold", type=float, default=DEFAULT_THRESHOLD)
@@ -178,6 +180,8 @@ def main() -> None:
         events: list[str] = []
         try:
             while True:
+                if args.stop_file and args.stop_file.exists():
+                    break
                 if reader.error:
                     raise SystemExit(reader.error)
                 seq_id, frame = reader.read()

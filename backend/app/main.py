@@ -11,6 +11,7 @@ from sqlalchemy.orm import Session
 from app.attendance import NotEligible, UnknownExam, UnknownStudent, mark_attendance
 from app.config import CORS_ORIGINS, ENROLL_DEFAULT_EXAM, ENROLL_MODEL, FRONTEND_DIR
 from app.db import engine, get_session
+from app.control import router as control_router, control_key
 from app.live import LiveStore
 from app.models import AttendanceRecord, Base, Exam, FaceEmbedding, Student
 from app.vision.web_enroll import decode_image, enroll_from_photos
@@ -20,6 +21,7 @@ from app.vision.web_enroll import decode_image, enroll_from_photos
 async def lifespan(_: FastAPI):
     # Create tables on first boot so a fresh hosted database (e.g. Supabase) just works.
     Base.metadata.create_all(engine)
+    control_key()
     yield
 
 
@@ -29,6 +31,8 @@ app = FastAPI(
     description="REST API for exams, students, attendance records and web face enrollment.",
     lifespan=lifespan,
 )
+
+app.include_router(control_router)
 
 # Allow the phone web app (possibly hosted on a different origin) to call the API.
 _origins = ["*"] if CORS_ORIGINS.strip() == "*" else [o.strip() for o in CORS_ORIGINS.split(",") if o.strip()]

@@ -124,3 +124,11 @@ annotations. Reports observation-level errors, unresolved unknowns and replay pr
 timing without changing attendance or publishing a live session. See `VALIDATION.md` for
 the actual live multi-person rehearsal and the replay limitations. As of this change,
 155 backend tests pass; actual PC/camera performance has not been measured here.
+
+## Local demo control progress
+
+Added a narrowly scoped local panel for camera start/stop, inbox sync, volunteer readiness,
+registration and preview-confirmed selected/keep-only cleanup. This is not the full admin
+platform excluded from the agreed scope. Windows startup convenience files and a private
+backend env template are included. See dashboard/README.md for authentication boundaries,
+cloud deletion exclusions, process lifecycle limits and one-time setup.

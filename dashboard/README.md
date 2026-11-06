@@ -42,13 +42,13 @@ Geist fonts are bundled through npm, not fetched from Google at runtime.
 
 Production build (optional): `npm run build`, then `npm run start -- --hostname 127.0.0.1`.
 The development/preview default binds 0.0.0.0 to support Arena live previews; the commands
-above override this for a PC-only demo. This dashboard/API has no new authentication and
+above override this for a PC-only demo. This dashboard/API has no user-login system and
 must **not** be deployed as a public organizer interface.
 
 ## Data connection
 
 Browser requests use relative `/api/*` URLs. Next's server proxies only allowlisted,
-read-only paths to `BACKEND_ORIGIN` (defaults to `http://127.0.0.1:8000`). This is a
+read paths and explicit demo-control POST paths to `BACKEND_ORIGIN` (defaults to `http://127.0.0.1:8000`). This is a
 server-only setting; never set a browser-facing URL to localhost for a different PC.
 For a nondefault local backend port, set `$env:BACKEND_ORIGIN` before starting Next.
 
@@ -90,3 +90,63 @@ Tests cover idle/disconnected state, illustration opt-in/exit, student search/de
 live attendance distinctions, long indices, UTC formatting and CSV escaping. The local API
 proxy can be checked at `http://localhost:3000/api/live/session`. No real-camera performance
 claims are made by these UI tests. Real multi-person trials remain necessary.
+
+## Demo controls — no repeated terminal commands
+
+After downloading this version, stop old API/Next/camera windows once. On Windows,
+double-click **Start Demo.cmd** in the repository root. It opens the backend and dashboard
+servers in two windows; leave them open. Visit http://localhost:3000, then **Demo controls**.
+Node 22.12+, uv and initial model/package downloads are still prerequisites. The launcher
+installs locked dashboard dependencies and starts the backend with its vision extra.
+It is a Windows convenience launcher, not an installed service; do not launch duplicates.
+
+From the dashboard you can:
+- Select an existing exam and camera number; start recognition at detector size 480/four threads.
+- Stop a dashboard-started camera cooperatively (after inference/model loading finishes).
+- Sync pending phone submissions; see bounded progress/output and task exit status.
+- View **all local volunteers**, face-sample counts, registration and readiness reasons.
+- Register selected volunteers for the chosen exam, without altering fee/suspension flags.
+- Remove selected volunteers, or **keep only selected** and preview removal of everyone else.
+
+Deletion requires a server-generated preview and typing DELETE. Preview tokens expire after
+two minutes, are single-use, and records are checked again before deletion. Students, face
+embeddings, registrations and their attendance are removed; **exams stay**. No operation
+runs merely because you opened the panel. Real controls are disabled in layout preview.
+Camera/gallery operations are mutually exclusive; an external camera must be stopped with q.
+An unresponsive/stale external camera is blocked conservatively, not force-killed.
+
+**Local deletion is not cloud deletion.** Supabase inbox submissions are preserved and a
+pending submission can recreate a student at the next sync. Cloud inbox purge, editing student
+academic data, and exam creation are not exposed in this first control panel.
+
+### One-time private sync configuration
+
+Copy `backend/.env.example` to `backend/.env` and set the real project URL and service-role
+key **in that local file only**. The launcher passes it to uv's env-file option, and sync
+children inherit the settings. Keep the file private; never put this key in Netlify or the
+browser. If your API is started manually, use:
+
+```powershell
+cd backend
+uv run --frozen --extra vision --env-file .env uvicorn app.main:app --host 127.0.0.1 --port 8000
+```
+
+Without the private config, camera/roster controls still work; sync stays disabled. Restart
+the backend after changing environment settings. ENROLL_MODEL sets the model for both
+managed sync and managed recognition; it must match existing gallery embeddings.
+
+### Local control protection and limits
+
+The backend generates `backend/data/control.key` with owner-only POSIX creation permissions.
+Next reads it server-side and sends it to the API; it is **never sent to browser JavaScript**.
+Keep the checkout and this key private on Windows too. POST controls also reject cross-origin
+requests. Override LOCAL_CONTROL_KEY_FILE only on the Next server if your layout differs.
+Keep both servers bound to loopback and use **one backend worker**. This is not a public
+multiuser administration service. Anyone allowed to access this local Next server can use
+its controls; the secret is an internal server-to-server guard, not a user login.
+
+The backend must remain running while a managed task runs. Close the camera using Stop
+before shutting down the API; an unexpected API crash can orphan a child process. Close
+that camera with q before restarting. Sync is not forcibly cancelled mid-import; failures
+and partial sync details appear in its output. Async job metadata is in memory, not a job
+queue persisted across API restarts. Do not use `uvicorn --reload` during the demonstration.

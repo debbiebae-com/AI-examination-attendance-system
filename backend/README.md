@@ -296,7 +296,7 @@ until processing begins. A second CLI cannot claim a fresh active session.
 Publishing is throttled to at most twice per second during normal frames. No photos or
 embeddings are copied into the session file. It does contain identity numbers and should
 stay local (all `.db` files are ignored by Git). This is a local demo feed without
-new authentication; do not expose the API publicly. Historical saved attendance is
+a user-login system; demo-control writes have a server-side guard, but do not expose the API publicly. Historical saved attendance is
 not deleted when a new live session begins.
 
 ## Multi-person validation
@@ -311,3 +311,13 @@ uv run --frozen --extra vision python -m app.vision.validate_video --video data/
 Supply consented footage and manually verified bounding-box labels. This measures recorded
 recognition outcomes and processing time without changing attendance. It does not substitute
 for a live camera trial: replay processes every frame while live capture drops stale frames.
+
+
+## Dashboard demo controls
+
+The Next.js dashboard can now launch/stop recognition, launch sync, list volunteer readiness,
+register selected volunteers, and preview/confirm local selected/keep-only deletion. See
+[dashboard setup](../dashboard/README.md#demo-controls--no-repeated-terminal-commands).
+`Start Demo.cmd` opens the two required servers on Windows; no per-task CLI commands are needed.
+The API must use the vision extra and one worker, without auto-reload. Sync credentials stay
+in the PC's private backend/.env file, loaded by the launcher. Never expose controls publicly.

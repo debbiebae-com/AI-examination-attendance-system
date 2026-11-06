@@ -30,3 +30,9 @@ dashboard/next-env.d.ts
 
 # Consented validation videos, annotations and identity-bearing reports
 backend/data/validation/
+
+# PC-only dashboard control secret and process signal
+backend/data/control.key
+backend/data/camera.stop
+
+!backend/.env.example
