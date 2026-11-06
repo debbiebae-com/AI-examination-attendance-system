@@ -94,20 +94,24 @@ claims are made by these UI tests. Real multi-person trials remain necessary.
 
 ## Demo controls — no repeated terminal commands
 
-After downloading this version, stop old API/Next/camera windows once. On Windows,
-double-click **Start Demo.cmd** in the repository root. It opens the backend and dashboard
-servers in two windows; leave them open. Visit http://localhost:3000, then **Demo controls**.
-Node 22.12+, uv and initial model/package downloads are still prerequisites. The launcher
-installs locked dashboard dependencies and starts the backend with its vision extra.
-It is a Windows convenience launcher, not an installed service; do not launch duplicates.
+Windows startup is now clickable. Stop old manually started servers once, then:
 
-From the dashboard you can:
-- Select an existing exam and camera number; start recognition at detector size 480/four threads.
-- Stop a dashboard-started camera cooperatively (after inference/model loading finishes).
-- Sync pending phone submissions; see bounded progress/output and task exit status.
-- View **all local volunteers**, face-sample counts, registration and readiness reasons.
-- Register selected volunteers for the chosen exam, without altering fee/suspension flags.
-- Remove selected volunteers, or **keep only selected** and preview removal of everyone else.
+1. Double-click **Prepare Demo.cmd** while online. It installs locked dependencies, warms
+   the full face model pack without opening a camera, and builds the production dashboard.
+2. On presentation day, double-click **Start Demo.cmd** (or the **ExamLens** desktop shortcut
+   created during preparation). It starts background servers and opens the browser after
+   the backend, dashboard and API proxy are healthy. No dependency installs or development
+   builds run on an ordinary launch. A second click reopens the existing owned dashboard.
+3. Use **Stop Demo.cmd** when finished. Closing the browser alone does not stop servers.
+
+See [the Windows launcher guide](../docs/PRESENTATION_LAUNCHER.md) for offline rehearsal,
+updates, logs and port conflicts. Node 22.12+, uv and first-time internet access are required.
+Rerun Prepare after an app update. Camera/DroidCam connection is manual and unchanged.
+
+From the dashboard you can select the working camera, start/stop recognition, reset a
+recognition demonstration, sync online submissions, enroll locally through PC/DroidCam,
+and inspect all local volunteers' face-sample readiness. No manual exam registration is
+needed in demonstration mode. Advanced student deletion remains separate.
 
 Deletion requires a server-generated preview and typing DELETE. Preview tokens expire after
 two minutes, are single-use, and records are checked again before deletion. Students, face

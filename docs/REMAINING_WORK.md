@@ -232,3 +232,14 @@ PC processes to see the new overlays; no new hardware-camera changes were made.
 - Implemented: Enroll locally through the existing desktop guided capture using the selected PC or DroidCam source/index/backend, matched model pack, cancellation and explicit re-enrollment safeguard. Successful capture saves directly to local gallery; failed/cancelled capture saves nothing. Online inbox sync is retained.
 - Pending user-side verification: actual Windows guided enrollment through working DroidCam, single-/multi-person recognition, reset/repeat, and enrollment with internet disabled after models are installed. No sandbox hardware claim.
 - Defer extra readiness/diagnostics UI until the user reviews this smaller workflow. Do not reintroduce registration/classroom administration or all-exam deletion.
+
+## Clickable Windows presentation launch
+
+Replaced the old per-launch npm install/dev-server launcher with Prepare/Start/Stop CMDs.
+Prepare warms the existing full face model pack and builds production Next once; Start uses
+an offline/no-sync Python environment, verifies HTTP/proxy readiness, opens the browser,
+reuses healthy owned servers, and tracks process creation identity. Stop cooperatively
+waits for demo tasks and only terminates owned process trees. Private logs/state are Git
+ignored. Camera connection and recognition/capture behavior are unchanged. Actual Windows
+launch/duplicate launch/Stop/offline smoke testing remains user-side (Linux sandbox cannot
+execute Win32 process/shortcut APIs). See docs/PRESENTATION_LAUNCHER.md.

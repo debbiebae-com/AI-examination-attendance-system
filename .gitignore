@@ -39,3 +39,6 @@ backend/data/camera.stop
 
 # Generated MediaPipe runtime files (copied from locked npm package at build)
 frontend/public/pose/wasm/
+
+# Private Windows presentation launcher state and server logs
+.demo-runtime/

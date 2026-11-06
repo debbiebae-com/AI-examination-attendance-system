@@ -38,4 +38,9 @@ InsightFace's pretrained weights are restricted to non-commercial research under
 The separate `dashboard/` Next.js app reads the local attendance session feed. It provides
 recognition activity, attendance counts, student details, search and a simple CSV export.
 The existing Netlify enrollment app is unchanged. See [dashboard/README.md](dashboard/README.md)
-for the three local startup commands and preview-mode limitations.
+for dashboard usage and preview-mode limitations.
+
+**Windows presentation startup:** double-click **Prepare Demo.cmd** once while online,
+then **Start Demo.cmd** to open ExamLens without typing server commands. Use **Stop Demo.cmd**
+to shut down. A desktop shortcut is created when possible. See the
+[launcher guide](docs/PRESENTATION_LAUNCHER.md). Connect DroidCam manually as before.

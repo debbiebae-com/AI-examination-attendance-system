@@ -1,3 +1,6 @@
 @echo off
-powershell.exe -NoProfile -ExecutionPolicy Bypass -File "%~dp0start-demo.ps1"
-if errorlevel 1 pause
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File "%~dp0start-demo.ps1" -Mode Start
+if errorlevel 1 (
+    pause
+    exit /b 1
+)
