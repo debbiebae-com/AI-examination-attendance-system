@@ -174,3 +174,12 @@ level breakdown with empty/offline states, minute aggregation, deduplication and
 stamp handling. Applied a saturated teal canvas/filled metric cards while keeping dense
 records readable. No absent totals/percentages inferred. Await the next visual review
 before adding more charts or changing the layout further.
+
+### Dark enterprise iteration
+
+Applied user's charcoal/amber reference to Radix/shadcn controls and attendance visuals.
+Added grouped saved/new attendance bars, a latest-record marker, real five-snapshot mini
+bars, Ctrl/Cmd+K shared search, activity shortcut and fullscreen control. Retained student
+record semantics and all demo safeguards. General Sans uses Fontshare API, with bundled
+Geist offline fallback; font binary not redistributed. No fake sales, percentages, AI
+claims or subscription tiers. Await user visual review before further feature additions.

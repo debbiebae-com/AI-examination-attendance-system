@@ -171,3 +171,65 @@ it("opens and closes the compact navigation", async () => {
   await user.click(screen.getByRole("link", { name: "Activity log" }));
   expect(toggle).toHaveAttribute("aria-expanded", "false");
 });
+
+it("supports Ctrl+K and shared workspace search without fake notifications", async () => {
+  const scroll = Object.getOwnPropertyDescriptor(
+    Element.prototype,
+    "scrollIntoView",
+  );
+  Object.defineProperty(Element.prototype, "scrollIntoView", {
+    configurable: true,
+    value: vi.fn(),
+  });
+  try {
+    const user = userEvent.setup();
+    render(<Dashboard />);
+    await screen.findByText("No active session");
+    await user.click(screen.getByRole("button", { name: "Preview layout" }));
+    await user.keyboard("{Control>}k{/Control}");
+    // jsdom has no visible header dimensions, so the shortcut uses the record input.
+    expect(
+      screen.getByRole("textbox", { name: "Search students" }),
+    ).toHaveFocus();
+    await user.type(
+      screen.getByRole("textbox", { name: "Workspace search" }),
+      "Kwame",
+    );
+    expect(screen.getAllByRole("row")).toHaveLength(2);
+    expect(
+      screen.getByRole("textbox", { name: "Search students" }),
+    ).toHaveValue("Kwame");
+    await user.click(
+      screen.getByRole("button", { name: "View recognition activity" }),
+    );
+    expect(screen.getByRole("link", { name: "Activity log" })).toHaveAttribute(
+      "aria-current",
+      "location",
+    );
+  } finally {
+    if (scroll)
+      Object.defineProperty(Element.prototype, "scrollIntoView", scroll);
+    else Reflect.deleteProperty(Element.prototype, "scrollIntoView");
+  }
+});
+
+it("selects attendance rows for a filtered export without deleting records", async () => {
+  const user = userEvent.setup();
+  render(<Dashboard />);
+  await screen.findByText("No active session");
+  await user.click(screen.getByRole("button", { name: "Preview layout" }));
+  await user.click(
+    screen.getByRole("checkbox", { name: "Select Kwame Mensah" }),
+  );
+  expect(screen.getByText("1 selected")).toBeInTheDocument();
+  expect(screen.getByRole("button", { name: "Export selected" })).toBeEnabled();
+  await user.click(
+    screen.getByRole("checkbox", { name: "Select all visible students" }),
+  );
+  expect(screen.getByText("4 selected")).toBeInTheDocument();
+  await user.click(screen.getByRole("button", { name: "Clear" }));
+  expect(
+    screen.queryByRole("button", { name: "Export selected" }),
+  ).not.toBeInTheDocument();
+  expect(screen.getAllByRole("row")).toHaveLength(5);
+});

@@ -9,13 +9,19 @@ export default function RootLayout({
   children,
 }: Readonly<{ children: React.ReactNode }>) {
   return (
-    <html lang="en">
+    <html lang="en" className="dark">
+      <head>
+        <link
+          rel="stylesheet"
+          href="https://api.fontshare.com/v2/css?f[]=general-sans@400,500,600,700&display=swap"
+        />
+      </head>
       <body>
         <Theme
           className="attendance-theme"
-          appearance="light"
-          accentColor="teal"
-          grayColor="sage"
+          appearance="dark"
+          accentColor="orange"
+          grayColor="gray"
           radius="medium"
           scaling="100%"
         >

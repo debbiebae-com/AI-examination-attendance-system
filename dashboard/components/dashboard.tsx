@@ -4,6 +4,9 @@ import { useEffect, useRef, useState } from "react";
 import { Card as ThemeCard, Heading, Text } from "@radix-ui/themes";
 import {
   Activity,
+  Bell,
+  Monitor,
+  Info,
   ArrowDownToLine,
   ArrowUpRight,
   BookOpen,
@@ -84,8 +87,8 @@ function AttendanceBadge({ present }: { present: boolean }) {
       variant="outline"
       className={
         present
-          ? "gap-1.5 rounded-md border-emerald-200 bg-emerald-50 text-emerald-800"
-          : "gap-1.5 rounded-md text-muted-foreground"
+          ? "table-status gap-1.5 rounded-md border-emerald-200 bg-emerald-50 text-emerald-800"
+          : "table-status gap-1.5 rounded-md text-muted-foreground"
       }
     >
       {present ? <Check className="size-3" /> : <Clock3 className="size-3" />}
@@ -100,14 +103,55 @@ export function Dashboard() {
   const [loading, setLoading] = useState(true);
   const [illustration, setIllustration] = useState(false);
   const [retry, setRetry] = useState(0);
+  const [checked, setChecked] = useState<string[]>([]);
   const [query, setQuery] = useState("");
   const [selected, setSelected] = useState<Student | null>(null);
   const [tab, setTab] = useState<"all" | "present">("all");
   const [help, setHelp] = useState(false);
   const [section, setSection] = useState("#overview");
   const [navOpen, setNavOpen] = useState(false);
+  const [history, setHistory] = useState<number[][]>([]);
+  const historySession = useRef<string | null | undefined>(undefined);
+  const quickSearch = useRef<HTMLInputElement>(null);
+  const recordSearch = useRef<HTMLInputElement>(null);
+  useEffect(() => {
+    const onKey = (event: KeyboardEvent) => {
+      if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === "k") {
+        event.preventDefault();
+        const input =
+          quickSearch.current && quickSearch.current.offsetWidth
+            ? quickSearch.current
+            : recordSearch.current;
+        input?.focus();
+        input?.scrollIntoView({ block: "center" });
+      }
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, []);
+  useEffect(() => {
+    if (!feed) {
+      setHistory([]);
+      return;
+    }
+    const changed = historySession.current !== feed.session.session_id;
+    historySession.current = feed.session.session_id;
+    const sample = [
+      feed.attendance.length,
+      feed.session.identified_count ??
+        new Set(
+          feed.session.events
+            .filter((event) => event.kind === "identified")
+            .map((event) => event.student_no),
+        ).size,
+      feed.session.unidentified_now,
+      feed.session.processed_fps ?? 0,
+    ];
+    setHistory((previous) => [...(changed ? [] : previous).slice(-4), sample]);
+  }, [feed]);
   const previousSession = useRef<string | null | undefined>(undefined);
   useEffect(() => {
+    setChecked([]);
     if (illustration) {
       setFeed(demoFeed());
       setError("");
@@ -135,7 +179,10 @@ export function Dashboard() {
             )
           : [];
         if (!disposed) {
-          if (previousSession.current !== session.session_id) setSelected(null);
+          if (previousSession.current !== session.session_id) {
+            setSelected(null);
+            setChecked([]);
+          }
           previousSession.current = session.session_id;
           setFeed({ session, students, attendance });
           setError("");
@@ -186,16 +233,29 @@ export function Dashboard() {
       (e) => e.student_no === selected?.student_no && e.kind === "identified",
     )
     .at(-1);
-  function exportAttendance() {
+  function exportAttendance(onlySelected = false) {
     if (!feed) return;
     const url = URL.createObjectURL(
-      new Blob(["\uFEFF" + csv(feed.attendance, exam)], {
-        type: "text/csv;charset=utf-8;",
-      }),
+      new Blob(
+        [
+          "\uFEFF" +
+            csv(
+              onlySelected
+                ? feed.attendance.filter((record) =>
+                    checked.includes(record.student_no),
+                  )
+                : feed.attendance,
+              exam,
+            ),
+        ],
+        {
+          type: "text/csv;charset=utf-8;",
+        },
+      ),
     );
     const link = document.createElement("a");
     link.href = url;
-    link.download = `${illustration ? "ILLUSTRATION-" : ""}attendance-${exam?.course_code || "exam"}.csv`;
+    link.download = `${illustration ? "ILLUSTRATION-" : ""}attendance-${exam?.course_code || "exam"}${onlySelected ? "-selected" : ""}.csv`;
     link.click();
     URL.revokeObjectURL(url);
   }
@@ -256,14 +316,14 @@ export function Dashboard() {
       )}
       <aside
         aria-label="Workspace navigation"
-        className={`${navOpen ? "flex" : "hidden"} palette-sidebar fixed inset-y-0 left-0 z-40 w-52 flex-col border-r md:flex`}
+        className={`${navOpen ? "flex" : "hidden"} palette-sidebar fixed inset-y-0 left-0 z-40 w-56 flex-col border-r md:flex`}
       >
         <a
           href="#overview"
           onClick={() => setNavOpen(false)}
           className="flex h-14 items-center gap-2.5 border-b px-5"
         >
-          <span className="grid size-7 place-items-center rounded-md bg-primary text-primary-foreground">
+          <span className="grid size-8 place-items-center rounded-md bg-primary text-primary-foreground">
             <ScanFace className="size-4" />
           </span>
           <span className="text-sm font-semibold tracking-tight">ExamLens</span>
@@ -275,8 +335,8 @@ export function Dashboard() {
               Local demonstration
             </p>
           </div>
-          <p className="mb-2 px-2 text-[11px] font-medium text-muted-foreground">
-            Workspace
+          <p className="mb-2 px-2 text-[10px] font-bold uppercase tracking-widest text-muted-foreground">
+            Main Menu
           </p>
           <nav className="space-y-1">
             {[
@@ -286,19 +346,25 @@ export function Dashboard() {
             ].map(([href, label, Icon]) => {
               const NavIcon = Icon as typeof Activity;
               return (
-                <a
-                  key={String(href)}
-                  href={String(href)}
-                  onClick={() => {
-                    setNavOpen(false);
-                    setSection(String(href));
-                  }}
-                  aria-current={section === href ? "location" : undefined}
-                  className="palette-nav-link flex items-center gap-2.5 rounded-md px-2.5 py-2 text-xs font-medium"
-                >
-                  <NavIcon className="size-4" />
-                  {String(label)}
-                </a>
+                <div key={String(href)}>
+                  {href === "#activity" && (
+                    <p className="mb-2 mt-6 px-2 text-[10px] font-bold uppercase tracking-widest text-muted-foreground">
+                      Monitoring
+                    </p>
+                  )}
+                  <a
+                    href={String(href)}
+                    onClick={() => {
+                      setNavOpen(false);
+                      setSection(String(href));
+                    }}
+                    aria-current={section === href ? "location" : undefined}
+                    className="palette-nav-link flex items-center gap-2.5 rounded-md px-2.5 py-2 text-xs font-medium"
+                  >
+                    <NavIcon className="size-4" />
+                    {String(label)}
+                  </a>
+                </div>
               );
             })}
           </nav>
@@ -316,6 +382,17 @@ export function Dashboard() {
             <CircleHelp />
             Demo guide
           </Button>
+          <div className="flex items-center gap-2 rounded-lg border p-2">
+            <span className="grid size-8 place-items-center rounded-full border border-primary/40 bg-primary/15 text-xs font-semibold text-primary">
+              LO
+            </span>
+            <div>
+              <p className="text-xs font-medium">Local operator</p>
+              <p className="mt-0.5 text-[10px] text-muted-foreground">
+                Presentation workspace
+              </p>
+            </div>
+          </div>
           <div className="flex items-center gap-2 px-2 text-[11px] text-muted-foreground">
             <Database className="size-3.5" />
             <span>Local database</span>
@@ -325,7 +402,7 @@ export function Dashboard() {
           </div>
         </div>
       </aside>
-      <div className="min-w-0 md:ml-52">
+      <div className="min-w-0 md:ml-56">
         <header className="palette-topbar flex h-14 items-center justify-between gap-3 border-b px-4 sm:px-7">
           <div className="flex min-w-0 items-center gap-3">
             <Button
@@ -338,7 +415,7 @@ export function Dashboard() {
             >
               {navOpen ? <X /> : <Menu />}
             </Button>
-            <span className="text-xs text-muted-foreground">Workspace</span>
+            <span className="text-xs text-muted-foreground">Dashboard</span>
             <ChevronRight className="size-3 text-muted-foreground" />
             <span className="text-xs font-medium">
               {section === "#students"
@@ -349,6 +426,52 @@ export function Dashboard() {
             </span>
           </div>
           <div className="flex items-center gap-2 text-[11px] text-muted-foreground">
+            <div className="relative hidden lg:block">
+              <Search className="absolute left-3 top-2.5 size-3.5" />
+              <Input
+                ref={quickSearch}
+                aria-label="Workspace search"
+                value={query}
+                onChange={(event) => setQuery(event.target.value)}
+                onKeyDown={(event) => {
+                  if (event.key === "Enter")
+                    document.getElementById("students")?.scrollIntoView();
+                }}
+                placeholder="Search students…"
+                className="h-8 w-56 bg-muted pl-9 pr-12 text-xs"
+              />
+              <kbd className="pointer-events-none absolute right-2 top-2 rounded border px-1 text-[10px]">
+                ⌘ K
+              </kbd>
+            </div>
+            <Button
+              variant="outline"
+              size="icon-sm"
+              aria-label="View recognition activity"
+              onClick={() => {
+                setSection("#activity");
+                document.getElementById("activity")?.scrollIntoView();
+              }}
+            >
+              <Bell className="size-4" />
+            </Button>
+            <Button
+              variant="outline"
+              size="icon-sm"
+              className="hidden sm:inline-flex"
+              aria-label="Toggle fullscreen"
+              onClick={() => {
+                if (document.fullscreenElement)
+                  void document.exitFullscreen().catch(() => {});
+                else
+                  void document.documentElement
+                    .requestFullscreen?.()
+                    .catch(() => {});
+              }}
+            >
+              <Monitor className="size-4" />
+            </Button>
+
             <span
               className={`size-1.5 rounded-full ${error ? "bg-amber-500" : active ? "bg-emerald-600" : "bg-neutral-400"}`}
             />
@@ -398,7 +521,7 @@ export function Dashboard() {
               <Button
                 size="sm"
                 disabled={!feed?.attendance.length || !!error}
-                onClick={exportAttendance}
+                onClick={() => exportAttendance()}
               >
                 <ArrowDownToLine />
                 Export attendance
@@ -518,26 +641,44 @@ export function Dashboard() {
             aria-label="Session statistics"
             className="grid grid-cols-2 gap-3 lg:grid-cols-4"
           >
-            {metrics.map((metric) => (
+            {metrics.map((metric, index) => (
               <ThemeCard
                 key={metric.label}
                 size="3"
                 variant="surface"
                 className="palette-stat"
               >
-                <Text as="p" size="2" weight="medium" color="gray">
+                <Text as="p" className="metric-label">
                   {metric.label}
                 </Text>
-                <Heading
-                  as="h2"
-                  size="7"
-                  weight="medium"
-                  mt="3"
-                  className="tabular-nums"
-                >
-                  {metric.value}
-                </Heading>
-                <Text as="p" size="1" color="gray" mt="2">
+                <div className="mt-3 flex items-center justify-between gap-4">
+                  <Heading
+                    as="h2"
+                    size="7"
+                    weight="bold"
+                    className="tabular-nums"
+                  >
+                    {metric.value}
+                  </Heading>
+                  <div
+                    className="spark-bars"
+                    role="img"
+                    aria-label={`${metric.label}: ${!error ? history.length : 0} recent snapshots`}
+                  >
+                    {!error &&
+                      history.map((sample, position) => (
+                        <span
+                          key={position}
+                          title={String(sample[index])}
+                          style={{
+                            height: `${Math.max(4, (sample[index] / Math.max(1, ...history.map((point) => point[index]))) * 40)}px`,
+                          }}
+                        />
+                      ))}
+                  </div>
+                </div>
+                <Text as="p" className="metric-note flex items-center gap-1.5">
+                  <Info className="size-3 shrink-0" />
                   {metric.note}
                 </Text>
               </ThemeCard>
@@ -548,7 +689,7 @@ export function Dashboard() {
             offline={!!error}
             illustration={illustration}
           />
-          <div className="grid min-w-0 items-start gap-5 xl:grid-cols-[minmax(0,1fr)_290px]">
+          <div className="min-w-0 space-y-5">
             <section id="students" className="min-w-0">
               <Tabs
                 value={tab}
@@ -572,6 +713,7 @@ export function Dashboard() {
                     <div className="relative w-full sm:max-w-xs">
                       <Search className="pointer-events-none absolute left-2.5 top-2.5 size-3.5 text-muted-foreground" />
                       <Input
+                        ref={recordSearch}
                         aria-label="Search students"
                         placeholder="Search name, index or department…"
                         value={query}
@@ -579,15 +721,78 @@ export function Dashboard() {
                         className="h-8 pl-8 text-xs shadow-none"
                       />
                     </div>
-                    <span className="text-xs text-muted-foreground">
-                      {students.length} record{students.length === 1 ? "" : "s"}
-                    </span>
+                    <div className="flex items-center gap-3">
+                      {checked.length > 0 && (
+                        <>
+                          <span className="text-xs text-muted-foreground">
+                            {checked.length} selected
+                          </span>
+                          <Button
+                            size="xs"
+                            variant="outline"
+                            disabled={
+                              !!error ||
+                              !feed?.attendance.some((record) =>
+                                checked.includes(record.student_no),
+                              )
+                            }
+                            onClick={() => exportAttendance(true)}
+                          >
+                            Export selected
+                          </Button>
+                          <Button
+                            size="xs"
+                            variant="ghost"
+                            onClick={() => setChecked([])}
+                          >
+                            Clear
+                          </Button>
+                        </>
+                      )}
+                      <span className="text-xs text-muted-foreground">
+                        {students.length} record
+                        {students.length === 1 ? "" : "s"}
+                      </span>
+                    </div>
                   </div>
                   {["all", "present"].map((value) => (
                     <TabsContent key={value} value={value} className="m-0">
                       <Table className="min-w-[650px]">
                         <TableHeader className="bg-muted/35">
                           <TableRow>
+                            <TableHead className="w-10">
+                              <input
+                                type="checkbox"
+                                aria-label="Select all visible students"
+                                disabled={!students.length}
+                                checked={
+                                  !!students.length &&
+                                  students.every((student) =>
+                                    checked.includes(student.student_no),
+                                  )
+                                }
+                                onChange={(event) =>
+                                  setChecked(
+                                    event.target.checked
+                                      ? [
+                                          ...new Set([
+                                            ...checked,
+                                            ...students.map(
+                                              (student) => student.student_no,
+                                            ),
+                                          ]),
+                                        ]
+                                      : checked.filter(
+                                          (id) =>
+                                            !students.some(
+                                              (student) =>
+                                                student.student_no === id,
+                                            ),
+                                        ),
+                                  )
+                                }
+                              />
+                            </TableHead>
                             <TableHead>Student</TableHead>
                             <TableHead>Index number</TableHead>
                             <TableHead>Academic details</TableHead>
@@ -605,7 +810,32 @@ export function Dashboard() {
                               (r) => r.student_no === student.student_no,
                             );
                             return (
-                              <TableRow key={student.student_no}>
+                              <TableRow
+                                key={student.student_no}
+                                data-state={
+                                  checked.includes(student.student_no)
+                                    ? "selected"
+                                    : undefined
+                                }
+                              >
+                                <TableCell>
+                                  <input
+                                    type="checkbox"
+                                    aria-label={`Select ${student.full_name}`}
+                                    checked={checked.includes(
+                                      student.student_no,
+                                    )}
+                                    onChange={(event) =>
+                                      setChecked(
+                                        event.target.checked
+                                          ? [...checked, student.student_no]
+                                          : checked.filter(
+                                              (id) => id !== student.student_no,
+                                            ),
+                                      )
+                                    }
+                                  />
+                                </TableCell>
                                 <TableCell>
                                   <button
                                     onClick={() => setSelected(student)}
@@ -654,7 +884,7 @@ export function Dashboard() {
                           {!students.length && (
                             <TableRow>
                               <TableCell
-                                colSpan={6}
+                                colSpan={7}
                                 className="h-52 text-center"
                               >
                                 <p className="text-sm font-medium">
@@ -687,7 +917,7 @@ export function Dashboard() {
                 </Card>
               </Tabs>
             </section>
-            <div className="min-w-0 space-y-5">
+            <div className="grid min-w-0 gap-5 lg:grid-cols-[minmax(0,1fr)_minmax(0,1fr)]">
               <Card className="gap-0 py-0 shadow-none">
                 <div className="flex items-center justify-between border-b px-4 py-3.5">
                   <h2 className="text-xs font-semibold">

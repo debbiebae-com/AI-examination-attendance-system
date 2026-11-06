@@ -229,3 +229,32 @@ omitted from the timeline with a notice but still counted in the level chart. Em
 and disconnected charts show text instead of fabricated series. Chart animations are off;
 time-series values are also available as text. Layout preview uses explicitly fictional,
 spaced-out timestamps so the time chart can be inspected. No real attendance is modified.
+
+### Current iteration — dark enterprise / amber
+
+Supersedes the teal palette: #1A1A1A canvas, #222222 surfaces, #2A2A2A borders,
+#E8822A actions/chart bars, no decorative shadows. Sidebar is 224px; the 56px header
+is sticky, with shared quick search, Ctrl/Cmd+K focus, real activity-log navigation and
+fullscreen toggle. There is no notification backend or invented unread count. The footer
+profile is explicitly a local operator, not an authenticated account or subscription plan.
+Labels are lighter than the suggested #666666 to retain readable dark-mode contrast.
+
+General Sans uses Fontshare's hosted stylesheet/API (online). The existing locally bundled
+Geist font is the offline fallback. No third-party General Sans font binary is republished
+in this public repository. Only font loading requires that external service; local demo
+operations and fallback typography continue without internet.
+
+Metric mini bars show up to five actual poll snapshots, reset for a new session/mode;
+initially there may be only one bar. No fabricated historical bars or growth percentages.
+The grouped attendance chart compares cumulative saved records with new records in each
+recorded minute, highlighting the latest recorded bucket (not a fictitious current month).
+All bars use the same amber, varying opacity. The secondary summary is deterministic
+record aggregation, not an AI-generated insight. The table stays examination-specific,
+without fabricated transactions, prices, sales, or subscription metadata.
+
+The records table is full-width with row selection, select-all-visible, clear selection and
+selected-only attendance CSV export. Selected exports include saved attendance only and use
+`-selected` filenames; selection is not a destructive action. New session/mode clears it.
+Browser checks cover this filtered CSV and shortcut focus in addition to existing controls.
+Fontshare cannot be reached in the sandbox browser, so its screenshots use the bundled
+fallback; General Sans loading must be checked on an internet-connected presentation PC.
