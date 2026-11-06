@@ -261,3 +261,11 @@ User-side preparation showed npm ci succeeding without electron.exe. Electron 45
 has no automatic postinstall download; added explicit execution of its pinned install.js
 before checking the executable. Previous skip-scripts error attribution was incorrect.
 Added a static regression test; actual Windows runtime download still requires user retry.
+
+### Electron stuck closing follow-up
+User reports permanent Closing ExamLens screen. Fixed a lifecycle bug: Node child `close`
+can wait for stdio handles inherited by Windows server descendants after PowerShell exits.
+Resolve on launcher `exit`, release its pipes, log exit codes, and surface bounded launcher
+deadlines without force-killing tasks. Regression tests simulate successful Start/Stop exit
+with no close/EOF event. Windows confirmation and log review if the symptom persists are
+still required; no camera or attendance code changed.

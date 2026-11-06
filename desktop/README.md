@@ -61,3 +61,11 @@ The Linux sandbox validated these tests, dependency audit, JavaScript syntax and
 grammar, but **cannot validate Win32 native windows, shortcuts, shutdown or physical DroidCam**.
 Smoke-test Prepare Desktop → open → recognize → reset → exit → reopen on the presentation PC,
 including closing during startup and closing while guided capture is active.
+
+### Startup/closing stuck on the status screen
+
+The desktop waits for PowerShell **exit**, not stdio `close`: Windows background descendants
+can retain inherited pipe handles after the launcher finishes. Waiting for pipe EOF would
+leave the app permanently on startup/closing despite successful service operations. Launcher
+completion is logged; watchdog deadlines surface a failure rather than spinning forever and
+do not force-kill camera work. Actual Windows confirmation remains required.

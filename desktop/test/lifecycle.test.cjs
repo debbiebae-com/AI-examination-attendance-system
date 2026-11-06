@@ -27,19 +27,19 @@ test('service commands run hidden, without a shell, and wait for process complet
     invocation = args;
     const child = new EventEmitter();
     child.stdout = new PassThrough(); child.stderr = new PassThrough();
-    setImmediate(() => { child.stdout.write('Ready'); child.emit('close', 0); });
+    setImmediate(() => { child.stdout.write('Ready'); child.emit('exit', 0); });
     return child;
   };
   await runLauncher('/checkout', 'Start', owner, { spawnProcess, log: (line) => logs.push(line) });
   assert.equal(invocation[0], 'powershell.exe');
   assert.equal(invocation[2].shell, false);
   assert.equal(invocation[2].windowsHide, true);
-  assert.deepEqual(logs, ['Ready']);
+  assert.deepEqual(logs, ['Ready', 'Start: PowerShell exited (0).']);
 });
 test('service failure is surfaced rather than loading an unready dashboard', async () => {
   const spawnProcess = () => {
     const child = new EventEmitter(); child.stdout = new PassThrough(); child.stderr = new PassThrough();
-    setImmediate(() => child.emit('close', 1));
+    setImmediate(() => child.emit('exit', 1));
     return child;
   };
   await assert.rejects(runLauncher('/checkout', 'Start', owner, { spawnProcess }), /Start failed/);
@@ -72,4 +72,28 @@ test('desktop entry points keep renderer privileges disabled and desktop shutdow
   assert.ok(ps.includes('$state.owner -ne $Owner'));
   assert.ok(ps.includes('if (-not $NoBrowser)'));
   assert.ok(ps.includes('if ($Desktop)'));
+});
+
+test('startup and shutdown complete on exit even if descendants never close inherited pipes', async () => {
+  for (const mode of ['Start', 'Stop']) {
+    let child;
+    const spawnProcess = () => {
+      child = new EventEmitter(); child.stdout = new PassThrough(); child.stderr = new PassThrough();
+      setImmediate(() => child.emit('exit', 0)); // Deliberately no 'close' event.
+      return child;
+    };
+    await runLauncher('/checkout', mode, owner, { spawnProcess, timeoutMs: 100 });
+    assert.equal(child.stdout.destroyed, true);
+    assert.equal(child.stderr.destroyed, true);
+  }
+});
+test('a genuinely stalled launcher reports a deadline without force-killing work', async () => {
+  let killed = false;
+  const spawnProcess = () => {
+    const child = new EventEmitter(); child.stdout = new PassThrough(); child.stderr = new PassThrough();
+    child.kill = () => { killed = true; };
+    return child;
+  };
+  await assert.rejects(runLauncher('/checkout', 'Stop', owner, { spawnProcess, timeoutMs: 10 }), /taking too long/);
+  assert.equal(killed, false);
 });
