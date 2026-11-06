@@ -50,7 +50,11 @@ export function AttendanceCharts({
           <h2 className="text-sm font-semibold">Attendance over time</h2>
           <p className="mt-1 text-xs text-muted-foreground">
             Cumulative saved records · GMT ·{" "}
-            {illustration ? "illustrative data" : "selected examination"}
+            {illustration
+              ? "illustrative data"
+              : feed?.session.demo_classroom
+                ? "Test classroom 1 records"
+                : "selected examination"}
           </p>
         </div>
         <div className="p-4">

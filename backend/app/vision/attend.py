@@ -128,7 +128,7 @@ def draw_face_card(image, lines, x1, y1, y2, colour):
                     colour if index == 0 else (235, 235, 235), 1, cv2.LINE_AA)
 
 
-def draw(image, faces: list[DetectedFace], ids: list[int | None], tracker: FaceTracker, decider: AttendanceDecider, names: dict[str, str], events: list[str], fps: float = 0.0, academic: dict[str, dict] | None = None, exam_info: str = "") -> None:
+def draw(image, faces: list[DetectedFace], ids: list[int | None], tracker: FaceTracker, decider: AttendanceDecider, names: dict[str, str], events: list[str], fps: float = 0.0, academic: dict[str, dict] | None = None, exam_info: str = "", demo_classroom: bool = False) -> None:
     for face, tid in zip(faces, ids):
         if tid is None:
             continue
@@ -142,7 +142,7 @@ def draw(image, faces: list[DetectedFace], ids: list[int | None], tracker: FaceT
         # Academic data is only attached after identity confirmation, not while
         # the candidate is still being checked or the face is unknown.
         if track.marked and track.candidate:
-            lines += camera_detail_lines(track.candidate, (academic or {}).get(track.candidate))
+            lines += camera_detail_lines(track.candidate, (academic or {}).get(track.candidate), demo_classroom)
         draw_face_card(image, lines, x1, y1, y2, colour)
 
     height, width = image.shape[:2]
@@ -156,6 +156,7 @@ def draw(image, faces: list[DetectedFace], ids: list[int | None], tracker: FaceT
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument("--stop-file", type=Path, help="local dashboard cooperative stop signal")
+    parser.add_argument("--demo-classroom", action="store_true", help="Show Test classroom 1 and fictional per-student examinations; saved attendance scope is unchanged")
     parser.add_argument("--exam", required=True, help="course code, e.g. CS101")
     parser.add_argument("--camera", type=int, default=0)
     parser.add_argument("--capture-backend", choices=["auto", "dshow", "msmf"], default="auto")
@@ -194,7 +195,7 @@ def main() -> None:
             raise SystemExit(f"No exam with course code {args.exam}")
         exam_id = exam.id
         exam_title = exam.course_title
-        exam_info = f"{exam.course_code} | {exam.course_title} | {exam.hall}"
+        exam_info = "Test classroom 1 | Sample examinations (fictional)" if args.demo_classroom else f"{exam.course_code} | {exam.course_title} | {exam.hall}"
         matcher = load_matcher(session, threshold=args.threshold, margin=args.margin)
         students = session.scalars(select(Student)).all()
         names = {s.student_no: s.full_name for s in students}
@@ -204,7 +205,8 @@ def main() -> None:
         raise SystemExit("No enrolled faces found. Run the capture or photo enrollment first.")
 
     with LivePublisher(exam_id) as live:
-        live.payload.update(camera_source=args.camera_source, camera_index=args.camera, camera_backend=args.capture_backend)
+        live.payload.update(demo_classroom=args.demo_classroom, classroom_name="Test classroom 1" if args.demo_classroom else None, camera_source=args.camera_source, camera_index=args.camera, camera_backend=args.capture_backend)
+        live.store.publish(live.payload)
         print(f"Exam {args.exam}: {exam_title}. {len(matcher)} face samples loaded.")
         print("Loading InsightFace...")
         if args.liveness:
@@ -282,7 +284,7 @@ def main() -> None:
                 del events[:-MAX_EVENTS_SHOWN]
                 live.frame(visible_faces=len(faces), states=states, fps=fps_meter.fps,
                            processing_ms=(perf_counter() - began) * 1000)
-                draw(image, faces, ids, tracker, decider, names, events, fps_meter.fps, academic, exam_info)
+                draw(image, faces, ids, tracker, decider, names, events, fps_meter.fps, academic, exam_info, args.demo_classroom)
                 cv2.imshow(WINDOW, image)
                 fps_meter.tick()
                 if cv2.waitKey(1) & 0xFF == ord("q"):

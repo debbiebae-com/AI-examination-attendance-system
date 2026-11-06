@@ -66,7 +66,7 @@ it("shows the roster and sends camera start/stop tasks only on user action", asy
   await user.click(screen.getByRole("button", { name: "Start recognition" }));
   expect(requests[0]).toEqual({
     path: "/api/control/camera/start",
-    body: { exam_id: 1, camera: 0 },
+    body: { exam_id: 1, camera: 0, demo_classroom: true },
   });
 });
 it("requires preview and typed confirmation before removal", async () => {
@@ -183,4 +183,37 @@ it("keeps Windows options selectable if an older backend omits its platform", as
   await user.selectOptions(select, "msmf");
   expect(select).toHaveValue("msmf");
   expect(screen.getByRole("option", { name: /DirectShow/ })).not.toBeDisabled();
+});
+
+it("replaces examination selection with Test classroom 1 and uses its backing record", async () => {
+  const originalFetch = fetch;
+  vi.stubGlobal(
+    "fetch",
+    vi.fn(async (path: string, options?: RequestInit) => {
+      if (path.endsWith("/exams"))
+        return {
+          ok: true,
+          json: async () => [
+            { id: 9, course_code: "OTHER", course_title: "Other exam" },
+            { id: 1, course_code: "CS101", course_title: "Backing demo" },
+          ],
+        };
+      return originalFetch(path, options);
+    }),
+  );
+  const user = userEvent.setup();
+  render(<DemoControls onChanged={() => {}} />);
+  await user.click(screen.getByRole("button", { name: "Demo controls" }));
+  await screen.findByText("Ama Demo");
+  expect(
+    screen.getByRole("region", { name: "Demonstration classroom" }),
+  ).toHaveTextContent("Test classroom 1");
+  expect(
+    screen.queryByRole("combobox", { name: "Control examination" }),
+  ).not.toBeInTheDocument();
+  await user.click(screen.getByRole("button", { name: "Start recognition" }));
+  expect(requests.at(-1)).toEqual({
+    path: "/api/control/camera/start",
+    body: { exam_id: 1, camera: 0, demo_classroom: true },
+  });
 });

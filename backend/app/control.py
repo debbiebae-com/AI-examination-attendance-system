@@ -125,6 +125,7 @@ class CameraDevice(BaseModel):
 
 class CameraSelection(CameraDevice):
     exam_id: int
+    demo_classroom: bool = False
 
 
 def camera_args(body: CameraDevice):
@@ -200,7 +201,8 @@ def start_camera(body: CameraSelection, session: Session = Depends(get_session))
     with jobs.lock:
         exam = get_exam(session, body.exam_id)
         jobs.start("camera", ["app.vision.attend", "--exam", exam.course_code, *camera_args(body),
-                              "--det-size", "480", "--threads", "4", "--model", ENROLL_MODEL, "--stop-file", str(jobs.stop_path)])
+                              "--det-size", "480", "--threads", "4", "--model", ENROLL_MODEL, "--stop-file", str(jobs.stop_path),
+                              *(["--demo-classroom"] if body.demo_classroom else [])])
         jobs.camera_info = body.model_dump(exclude={"exam_id"})
         return jobs.status()
 

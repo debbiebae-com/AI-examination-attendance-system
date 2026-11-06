@@ -183,3 +183,18 @@ def test_camera_check_timeout_only_kills_the_checked_process(monkeypatch):
     manager._launch_timeout(done)
     callbacks[1]()
     assert killed==["checked"]
+
+
+def test_classroom_mode_is_an_overlay_flag_not_a_new_exam(api, session, monkeypatch):
+    calls=[]
+    class Process:
+        stdout=[]
+        def poll(self): return None
+    monkeypatch.setattr(control.subprocess,"Popen",lambda args,**kwargs:(calls.append(args) or Process()))
+    monkeypatch.setattr(control.Jobs,"_launch_reader",lambda self,process:None)
+    before=session.scalar(select(func.count(Exam.id)))
+    result=api.post("/control/camera/start",json={"exam_id":1,"camera":0,"demo_classroom":True})
+    assert result.status_code==200
+    assert "--demo-classroom" in calls[0]
+    assert "--exam" in calls[0] and "--det-size" in calls[0]
+    assert session.scalar(select(func.count(Exam.id)))==before

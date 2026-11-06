@@ -211,3 +211,13 @@ Added standalone isolated camera matrix diagnostic, bounded per index/backend, w
 format, colour/frame, environment and driver evidence; no recognition/DB/image writes.
 Next step is user-run Windows diagnostic output before selecting a root-cause-specific fix.
 Sandbox no-device failure/report path and automated tests pass; no physical phone verdict.
+
+## Test classroom presentation mode
+
+Replaced Demo controls' examination selector with Test classroom 1. Classroom operations use
+existing CS101 (first listed exam fallback); no new exam management. Dashboard launches pass
+an explicit demo-classroom overlay flag. Confirmed camera identities show stable randomized
+fictional course code/title labels; unknown/checking faces do not get fake identity details.
+Live header marks the classroom, while registration/eligibility/attendance and CSV scope stay
+on the existing backing record. No cloud enrollment schema changes. User must update/restart
+PC processes to see the new overlays; no new hardware-camera changes were made.

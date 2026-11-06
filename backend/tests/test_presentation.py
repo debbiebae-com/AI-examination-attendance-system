@@ -58,3 +58,18 @@ def test_camera_overlay_fits_long_lines_and_only_decorates_confirmed_faces(monke
     assert any("Level 300" in line for line in calls[-1])
     for line in attend.wrap_overlay("PS/CSC/24/0016 Computer Science and Information Technology",100):
         assert attend.cv2.getTextSize(line,attend.FONT,0.43,1)[0][0] <= 100
+
+
+def test_fictional_exam_assignments_are_stable_varied_and_display_only():
+    from app.presentation import demo_exam_for, DEMO_EXAMS
+    sample=demo_exam_for("PS/CSC/24/0016")
+    assert sample==demo_exam_for(" ps/csc/24/0016 ")
+    assert sample["fictional"] is True
+    assert (sample["code"],sample["title"]) in DEMO_EXAMS
+    assigned={demo_exam_for(f"VOL-{i}")["code"] for i in range(20)}
+    assert len(assigned)>1
+    normal=camera_detail_lines("PS/CSC/24/0016")
+    assert not any("Demo exam:" in line for line in normal)
+    classroom=camera_detail_lines("PS/CSC/24/0016",demo_classroom=True)
+    assert any(f"Demo exam: {sample['code']} - {sample['title']}"==line for line in classroom)
+    assert any("Level 300" in line for line in classroom)

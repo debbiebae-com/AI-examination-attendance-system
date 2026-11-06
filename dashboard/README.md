@@ -333,3 +333,25 @@ reviewing the baseline. This changes only the diagnostic probe, not recognition 
 Do not run diagnostics concurrently with recognition or other apps consuming the virtual
 webcam. Share the resulting text and identify which preview was correct/green, not photos,
 .env files, control keys or service credentials. Windows driver testing is still user-side.
+
+## Test classroom 1 — fictional camera examination labels
+
+Demo controls no longer offers an examination selector. It shows **Test classroom 1** and
+uses the existing CS101 exam as the backing attendance/readiness/registration record, or
+falls back to the first returned exam if CS101 is absent. No exam/student/registration data
+is created or edited merely by selecting this presentation mode. Existing registration,
+fee/suspension checks and saved attendance behavior remain in force. Sync retains the
+submission's own exam when supplied; the classroom backing exam is only its fallback.
+
+Dashboard-started recognition passes `--demo-classroom`. The camera header identifies Test
+classroom 1, and confirmed identities get a **Demo exam:** course code/title drawn from six
+fictional sample courses. A deterministic hash randomizes assignment across student indices
+while keeping each person's label stable across frames/restarts. Multiple students can share
+a sample course. New enrollments automatically receive the same display treatment when
+recognized. This is not university exam registration or a new scheduling subsystem.
+
+The live dashboard header identifies the demo classroom. Underlying exam metadata remains
+available for real attendance/export scope: CSV exports are not relabelled as the invented
+per-person exams. CLI recognition without `--demo-classroom` retains its existing real-exam
+header and does not add fictional exam labels. Camera/backend/phone capture settings and
+recognition thresholds are unchanged.

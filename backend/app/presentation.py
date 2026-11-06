@@ -26,12 +26,34 @@ def academic_display(student_no: str, programme: str = "", level: int | None = N
     }
 
 
-def camera_detail_lines(student_no: str, metadata: dict | None = None) -> list[str]:
+def camera_detail_lines(student_no: str, metadata: dict | None = None, demo_classroom: bool = False) -> list[str]:
     details = metadata if metadata is not None else academic_display(student_no)
     level = details.get("level")
     lines = [student_no + (f" | Level {level}" if level else "")]
     if details.get("department"):
         lines.append(details["department"])
+    if demo_classroom:
+        exam = demo_exam_for(student_no)
+        lines.append(f"Demo exam: {exam['code']} - {exam['title']}")
     if details.get("is_demo_metadata"):
         lines.append("Academic details: presentation mapping")
     return lines
+
+
+# Fictional presentation assignments only: never registration/eligibility/attendance keys.
+DEMO_EXAMS = (
+    ("CSC 301", "Software Engineering"),
+    ("CSC 303", "Database Systems"),
+    ("CSC 305", "Computer Networks"),
+    ("CSC 307", "Operating Systems"),
+    ("ITC 301", "Information Security"),
+    ("MAT 301", "Discrete Mathematics"),
+)
+
+
+def demo_exam_for(student_no: str) -> dict:
+    import hashlib
+    # Stable randomized assignment: do not reshuffle a student's label on each scan/restart.
+    digest = hashlib.sha256(("test-classroom-1:" + student_no.strip().upper()).encode()).digest()
+    code, title = DEMO_EXAMS[int.from_bytes(digest[:8], "big") % len(DEMO_EXAMS)]
+    return {"code": code, "title": title, "fictional": True}

@@ -74,7 +74,6 @@ export function DemoControls({
   onChanged: () => void;
 }) {
   const [open, setOpen] = useState(false);
-  const [exams, setExams] = useState<Exam[]>([]);
   const [exam, setExam] = useState("");
   const [people, setPeople] = useState<Person[]>([]);
   const [selected, setSelected] = useState<string[]>([]);
@@ -105,13 +104,17 @@ export function DemoControls({
           api<Job>("control/status"),
           api<Exam[]>("exams"),
         ]);
-        const chosen = exam || String(list[0]?.id || "");
+        const chosen =
+          exam ||
+          String(
+            (list.find((item) => item.course_code === "CS101") || list[0])
+              ?.id || "",
+          );
         const roster = chosen
           ? await api<Person[]>(`control/readiness?exam_id=${chosen}`)
           : [];
         if (cancelled) return;
         setJob(status);
-        setExams(list);
         setPeople(roster);
         setReady(true);
         setLoadError("");
@@ -228,29 +231,21 @@ export function DemoControls({
               {notice}
             </p>
           )}
-          <div className="mt-6">
-            <label className="space-y-2 text-xs font-medium">
-              Examination
-              <select
-                aria-label="Control examination"
-                value={exam}
-                disabled={busy || job?.running}
-                onChange={(e) => {
-                  setExam(e.target.value);
-                  setPlan(null);
-                  setSelected([]);
-                }}
-                className="h-10 w-full rounded-md border bg-background px-3 text-xs"
-              >
-                <option value="">Choose an examination</option>
-                {exams.map((e) => (
-                  <option key={e.id} value={e.id}>
-                    {e.course_code} · {e.course_title}
-                  </option>
-                ))}
-              </select>
-            </label>
-          </div>
+          <section
+            aria-label="Demonstration classroom"
+            className="mt-6 rounded-lg border bg-muted/40 p-4"
+          >
+            <p className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground">
+              Classroom
+            </p>
+            <h3 className="mt-1 text-sm font-semibold">Test classroom 1</h3>
+            <p className="mt-2 text-xs leading-5 text-muted-foreground">
+              Each recognized student shows a stable, randomly assigned sample
+              examination on camera. These are fictional presentation labels—not
+              exam registration. Saved attendance and readiness still use the
+              classroom's existing backing exam.
+            </p>
+          </section>
           <section
             aria-label="Camera source setup"
             className="mt-5 rounded-xl border p-4"
@@ -414,7 +409,11 @@ export function DemoControls({
               className="bg-primary text-primary-foreground hover:bg-primary/90"
               disabled={locked || !exam || !cameraValid}
               onClick={() =>
-                run("camera/start", { exam_id: Number(exam), ...cameraBody })
+                run("camera/start", {
+                  exam_id: Number(exam),
+                  ...cameraBody,
+                  demo_classroom: true,
+                })
               }
             >
               <Camera />
@@ -441,7 +440,7 @@ export function DemoControls({
           </div>
           <p className="mt-3 text-[11px] leading-5 text-muted-foreground">
             {job?.sync_configured
-              ? "Sync imports pending phone submissions and wipes cloud photos after successful sync. It uses each submission’s exam, falling back to the exam selected above."
+              ? "Sync imports pending phone submissions and wipes cloud photos after successful sync. It uses each submission’s exam, falling back to this classroom’s backing exam."
               : "Sync needs SUPABASE_URL and SUPABASE_SERVICE_KEY configured on the backend PC once. Never enter the service key in the browser."}{" "}
             Recognition opens the PC camera window; results flow into the live
             dashboard.

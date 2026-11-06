@@ -587,10 +587,14 @@ export function Dashboard() {
                     variant="secondary"
                     className="rounded-md font-mono text-xs"
                   >
-                    {exam?.course_code || "No exam"}
+                    {live?.demo_classroom
+                      ? "DEMO CLASSROOM"
+                      : exam?.course_code || "No exam"}
                   </Badge>
                   <h2 className="text-sm font-medium">
-                    {exam?.course_title || "No examination selected"}
+                    {live?.demo_classroom
+                      ? live.classroom_name || "Test classroom 1"
+                      : exam?.course_title || "No examination selected"}
                   </h2>
                 </div>
                 <Badge
@@ -609,7 +613,12 @@ export function Dashboard() {
               </div>
               <dl className="grid grid-cols-2 gap-x-5 gap-y-4 px-5 py-4 text-xs lg:grid-cols-4">
                 {[
-                  ["Venue", exam?.hall || "Not selected"],
+                  [
+                    "Venue",
+                    live?.demo_classroom
+                      ? "Test classroom 1"
+                      : exam?.hall || "Not selected",
+                  ],
                   [
                     "Scheduled time",
                     exam
@@ -1110,7 +1119,12 @@ export function Dashboard() {
                     "Index year code",
                     selectedAcademic?.index_year_code || "Not supplied",
                   ],
-                  ["Examination", exam?.course_title || "—"],
+                  [
+                    live?.demo_classroom
+                      ? "Attendance record scope"
+                      : "Examination",
+                    exam?.course_title || "—",
+                  ],
                   ["Building / venue", exam?.hall || "—"],
                   ["Recognized at", time(selectedRecognition?.at)],
                   ["Attendance recorded", time(selectedRecord?.recorded_at)],
