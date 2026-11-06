@@ -66,9 +66,12 @@ async function get<T>(path: string, signal: AbortSignal): Promise<T> {
 }
 
 function Avatar({ name, large = false }: { name: string; large?: boolean }) {
+  const tone = ["avatar-blue", "avatar-teal", "avatar-ochre"][
+    Array.from(name).reduce((total, char) => total + char.charCodeAt(0), 0) % 3
+  ];
   return (
     <span
-      className={`inline-flex shrink-0 items-center justify-center rounded-md border bg-muted/50 font-medium text-muted-foreground ${large ? "size-12 text-base" : "size-8 text-[11px]"}`}
+      className={`student-avatar ${tone} inline-flex shrink-0 items-center justify-center rounded-md border font-medium ${large ? "size-12 text-base" : "size-8 text-[11px]"}`}
       aria-label="Initials placeholder — no portrait available"
     >
       {initials(name)}
@@ -212,21 +215,25 @@ export function Dashboard() {
   const metrics = [
     {
       label: "Present",
+      tone: "teal",
       value: feed && !error ? feed.attendance.length : "—",
       note: "Saved examination records",
     },
     {
       label: "Identified",
+      tone: "blue",
       value: feed && !error ? identified : "—",
       note: "Distinct identities this session",
     },
     {
       label: "Unidentified",
+      tone: "amber",
       value: feed && !error ? (live?.unidentified_now ?? 0) : "—",
       note: "Unmatched tracks in view",
     },
     {
       label: "Processing rate",
+      tone: "slate",
       value:
         !error && live?.processed_fps != null
           ? `${live.processed_fps.toFixed(1)}`
@@ -254,7 +261,7 @@ export function Dashboard() {
       )}
       <aside
         aria-label="Workspace navigation"
-        className={`${navOpen ? "flex" : "hidden"} fixed inset-y-0 left-0 z-40 w-52 flex-col border-r bg-neutral-50 md:flex`}
+        className={`${navOpen ? "flex" : "hidden"} workspace-sidebar fixed inset-y-0 left-0 z-40 w-52 flex-col border-r md:flex`}
       >
         <a
           href="#overview"
@@ -291,7 +298,8 @@ export function Dashboard() {
                     setNavOpen(false);
                     setSection(String(href));
                   }}
-                  className={`flex items-center gap-2.5 rounded-md px-2.5 py-2 text-xs ${section === href ? "bg-neutral-200/65 font-medium" : "text-muted-foreground hover:bg-neutral-100 hover:text-foreground"}`}
+                  aria-current={section === href ? "location" : undefined}
+                  className="workspace-nav-link flex items-center gap-2.5 rounded-md px-2.5 py-2 text-xs"
                 >
                   <NavIcon className="size-4" />
                   {String(label)}
@@ -323,7 +331,7 @@ export function Dashboard() {
         </div>
       </aside>
       <div className="min-w-0 md:ml-52">
-        <header className="flex h-14 items-center justify-between gap-3 border-b px-4 sm:px-7">
+        <header className="workspace-header flex h-14 items-center justify-between gap-3 border-b px-4 sm:px-7">
           <div className="flex min-w-0 items-center gap-3">
             <Button
               variant="ghost"
@@ -453,13 +461,13 @@ export function Dashboard() {
               Camera session: {live.error}
             </div>
           )}
-          <Card className="gap-0 overflow-hidden py-0 shadow-none">
+          <Card className="exam-card gap-0 overflow-hidden py-0">
             <CardContent className="p-0">
-              <div className="flex flex-wrap items-center justify-between gap-4 border-b px-5 py-4">
+              <div className="exam-heading flex flex-wrap items-center justify-between gap-4 border-b px-5 py-4">
                 <div className="flex min-w-0 items-center gap-3">
                   <Badge
                     variant="secondary"
-                    className="rounded-md font-mono text-xs"
+                    className="rounded-md bg-primary font-mono text-xs text-primary-foreground"
                   >
                     {exam?.course_code || "No exam"}
                   </Badge>
@@ -516,12 +524,16 @@ export function Dashboard() {
             className="grid grid-cols-2 gap-3 lg:grid-cols-4"
           >
             {metrics.map((metric) => (
-              <Card key={metric.label} className="gap-0 py-0 shadow-none">
+              <Card
+                key={metric.label}
+                data-tone={metric.tone}
+                className="metric-card gap-0 py-0 shadow-none"
+              >
                 <CardContent className="p-4 lg:p-5">
                   <h2 className="text-xs font-medium text-muted-foreground">
                     {metric.label}
                   </h2>
-                  <p className="mt-3 text-3xl font-semibold tracking-tight tabular-nums">
+                  <p className="metric-value mt-3 text-3xl font-semibold tracking-tight tabular-nums">
                     {metric.value}
                   </p>
                   <p className="mt-2 text-[11px] leading-4 text-muted-foreground">
@@ -546,7 +558,10 @@ export function Dashboard() {
                         Recognized identities and saved attendance.
                       </p>
                     </div>
-                    <TabsList aria-label="Record filter">
+                    <TabsList
+                      className="record-tabs"
+                      aria-label="Record filter"
+                    >
                       <TabsTrigger value="all">All records</TabsTrigger>
                       <TabsTrigger value="present">Present only</TabsTrigger>
                     </TabsList>
@@ -568,7 +583,7 @@ export function Dashboard() {
                   </div>
                   {["all", "present"].map((value) => (
                     <TabsContent key={value} value={value} className="m-0">
-                      <Table className="min-w-[650px]">
+                      <Table className="record-table min-w-[650px]">
                         <TableHeader className="bg-muted/35">
                           <TableRow>
                             <TableHead>Student</TableHead>
@@ -671,8 +686,8 @@ export function Dashboard() {
               </Tabs>
             </section>
             <div className="min-w-0 space-y-5">
-              <Card className="gap-0 py-0 shadow-none">
-                <div className="flex items-center justify-between border-b px-4 py-3.5">
+              <Card className="student-record-card gap-0 overflow-hidden py-0 shadow-none">
+                <div className="student-record-heading flex items-center justify-between border-b px-4 py-3.5">
                   <h2 className="text-xs font-semibold">
                     Latest student record
                   </h2>
