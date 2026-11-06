@@ -6,6 +6,7 @@ An AI-powered examination attendance system that uses real-time facial recogniti
 
 - `backend/`: FastAPI + SQLAlchemy API, face recognition and web enrollment (see [backend/README.md](backend/README.md))
 - `frontend/`: mobile-first student enrollment app (React + Vite + TypeScript + Tailwind + shadcn/ui; built to `frontend/dist` and served by the backend at `/app`)
+- `dashboard/`: local live recognition dashboard (Next.js + shadcn/ui; see [dashboard/README.md](dashboard/README.md))
 - `docs/`: deployment and demo notes (see [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md))
 - `Dockerfile`, `render.yaml`: one-container deployment of the API + web app
 
@@ -31,3 +32,10 @@ loss, $0.
 
 InsightFace's pretrained weights are restricted to non-commercial research under their current terms. This project is intended for academic demonstration subject to those terms.
 
+
+## Live organizer dashboard
+
+The separate `dashboard/` Next.js app reads the local attendance session feed. It provides
+recognition activity, attendance counts, student details, search and a simple CSV export.
+The existing Netlify enrollment app is unchanged. See [dashboard/README.md](dashboard/README.md)
+for the three local startup commands and preview-mode limitations.

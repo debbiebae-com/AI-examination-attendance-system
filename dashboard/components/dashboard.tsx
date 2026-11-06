@@ -1,0 +1,116 @@
+"use client";
+
+import { useEffect, useRef, useState } from "react";
+import { Activity, ArrowDownToLine, ArrowRight, BookOpen, Check, CheckCheck, ChevronRight, CircleHelp, Clock3, GraduationCap, LayoutDashboard, MapPin, Radio, RefreshCw, ScanFace, Search, ShieldCheck, Users, UserRoundCheck, UserRoundSearch, WifiOff } from "lucide-react";
+import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import { Card, CardContent } from "@/components/ui/card";
+import { Input } from "@/components/ui/input";
+import { Dialog, DialogContent, DialogDescription, DialogTitle } from "@/components/ui/dialog";
+import { csv, eventLabel, initials, statusLabel, time, visibleStudents, type Feed, type Student } from "@/lib/data";
+import { demoFeed } from "@/lib/demo";
+
+async function get<T>(path: string, signal: AbortSignal): Promise<T> {
+  const response = await fetch(`/api/${path}`, { signal, cache: "no-store" });
+  if (!response.ok) throw new Error(response.status === 503 ? "Local API is offline. Start the backend on this PC to connect." : `Could not load attendance data (${response.status}).`);
+  return response.json();
+}
+
+function Avatar({name,large=false}: {name:string;large?:boolean}) {
+  return <span className={`inline-flex shrink-0 items-center justify-center rounded-full border border-emerald-100 bg-emerald-50 font-medium text-emerald-800 ${large?"size-20 text-2xl":"size-10 text-xs"}`} aria-label="Initials placeholder — no portrait available">{initials(name)}</span>;
+}
+
+export function Dashboard() {
+  const [feed, setFeed] = useState<Feed | null>(null);
+  const [error, setError] = useState("");
+  const [loading, setLoading] = useState(true);
+  const [illustration, setIllustration] = useState(false);
+  const [retry, setRetry] = useState(0);
+  const [query, setQuery] = useState("");
+  const [selected, setSelected] = useState<Student | null>(null);
+  const [tab, setTab] = useState<"all"|"present">("all");
+  const [help, setHelp] = useState(false);
+  const previousSession = useRef<string | null | undefined>(undefined);
+  useEffect(() => {
+    if (illustration) { setFeed(demoFeed()); setError(""); setLoading(false); return; }
+    let disposed = false;
+    let timer: ReturnType<typeof setTimeout>;
+    let controller: AbortController;
+    setLoading(true); setFeed(null); setSelected(null);
+    async function poll() {
+      controller = new AbortController();
+      const timeout = setTimeout(()=>controller.abort(), 8000);
+      try {
+        const [session,students] = await Promise.all([
+          get<Feed["session"]>("live/session", controller.signal),
+          get<Student[]>("students", controller.signal),
+        ]);
+        const attendance = session.exam ? await get<Feed["attendance"]>(`exams/${session.exam.id}/attendance`, controller.signal) : [];
+        if (!disposed) {
+          if (previousSession.current !== session.session_id) setSelected(null);
+          previousSession.current = session.session_id;
+          setFeed({session,students,attendance}); setError("");
+        }
+      } catch (e) {
+        if (!disposed) setError(e instanceof Error && e.name!=="AbortError" ? e.message : "Connection timed out. Retrying the local API…");
+      } finally {
+        clearTimeout(timeout);
+        if (!disposed) {setLoading(false); timer=setTimeout(poll, 2000);}
+      }
+    }
+    poll();
+    return ()=>{disposed=true; clearTimeout(timer); controller?.abort();};
+  }, [illustration,retry]);
+
+  const live = feed?.session;
+  const exam = live?.exam;
+  const active = !error && live?.status === "running";
+  const students = feed ? visibleStudents(feed,query).filter(s=>tab!=="present" || feed.attendance.some(a=>a.student_no===s.student_no)) : [];
+  const nameFor = (id?:string|null)=>feed?.students.find(s=>s.student_no===id)?.full_name || id;
+  const selectedRecord = feed?.attendance.find(a=>a.student_no===selected?.student_no);
+  const selectedRecognition = live?.events.filter(e=>e.student_no===selected?.student_no && e.kind==="identified").at(-1);
+  function exportAttendance() {
+    if (!feed) return;
+    const url = URL.createObjectURL(new Blob(["\uFEFF"+csv(feed.attendance,exam)],{type:"text/csv;charset=utf-8;"}));
+    const link=document.createElement("a"); link.href=url; link.download=`${illustration?"ILLUSTRATION-":""}attendance-${exam?.course_code || "exam"}.csv`; link.click(); URL.revokeObjectURL(url);
+  }
+
+  return <div className="min-h-screen bg-[#f7f9f8] text-slate-900">
+    <aside className="fixed inset-y-0 left-0 z-20 hidden w-[232px] flex-col border-r border-slate-200/80 bg-white xl:flex">
+      <a href="/" className="flex h-[88px] items-center gap-2.5 px-7"><span className="grid size-9 place-items-center rounded-xl bg-emerald-800 text-white"><ScanFace className="size-6"/></span><span className="text-xl font-semibold tracking-[-.7px]">ExamLens<span className="text-emerald-700">.</span></span></a>
+      <div className="px-4 pt-7"><p className="mb-3 px-3 text-[10px] font-semibold tracking-[.18em] text-slate-400">WORKSPACE</p><a href="#overview" className="flex items-center gap-3 rounded-lg bg-emerald-50 px-3 py-3 text-sm font-medium text-emerald-900"><LayoutDashboard className="size-[18px]"/>Live dashboard<span className="ml-auto size-1.5 rounded-full bg-emerald-600"/></a><a href="#students" className="nav-link"><Users className="size-[18px]"/>Attendance</a><a href="#activity" className="nav-link"><Activity className="size-[18px]"/>Recognition activity</a></div>
+      <div className="mt-auto p-5"><div className="rounded-xl border border-emerald-100 bg-[#f5faf7] p-4"><ShieldCheck className="mb-3 size-5 text-emerald-700"/><p className="text-xs font-semibold">Local-first. Privacy-first.</p><p className="mt-1.5 text-[11px] leading-5 text-slate-500">Recognition stays on your PC. No cloud connection required.</p></div><button onClick={()=>setHelp(true)} className="nav-link mt-5 w-full"><CircleHelp className="size-[18px]"/>Demo guide<ArrowRight className="ml-auto size-3.5"/></button><div className="mt-5 flex items-center gap-3 border-t pt-5"><span className="grid size-9 place-items-center rounded-full bg-slate-100"><GraduationCap className="size-5 text-slate-500"/></span><div><p className="text-xs font-semibold">Examination workspace</p><p className="mt-1 text-[10px] text-slate-400">Local demonstration</p></div></div></div>
+    </aside>
+    <div className="xl:ml-[232px]">
+      <header className="flex h-[76px] items-center justify-between border-b border-slate-200/80 bg-white px-5 sm:px-9"><div className="flex items-center gap-2 text-xs"><span className="mr-2 font-semibold xl:hidden">ExamLens.</span><span className="hidden text-slate-400 sm:inline">Workspace</span><ChevronRight className="hidden size-3 text-slate-300 sm:block"/><span className="font-medium text-slate-600">Live dashboard</span></div><div className="flex items-center gap-4"><span className="hidden items-center gap-1.5 text-[11px] text-slate-500 sm:flex"><ShieldCheck className="size-3.5 text-emerald-700"/>Local workspace</span><span className="h-5 border-l"/><button onClick={()=>setHelp(true)} aria-label="Open demo guide" className="rounded-full p-2 hover:bg-slate-100"><CircleHelp className="size-[18px] text-slate-500"/></button></div></header>
+      <main id="overview" className="mx-auto max-w-[1500px] space-y-7 px-5 py-8 sm:px-9 sm:py-9">
+        <div className="flex flex-wrap items-center justify-between gap-4"><div><div className="mb-2 flex items-center gap-2 text-[10px] font-semibold uppercase tracking-[.18em] text-emerald-800"><span className="size-1.5 rounded-full bg-emerald-700"/>Intelligent examination attendance</div><h1 className="text-[28px] font-semibold tracking-[-1px] sm:text-[30px]">Live recognition dashboard</h1><p className="mt-2 text-xs text-slate-500 sm:text-sm">Every face recognized. Every attendance accounted for.</p></div><div className="flex gap-2"><Button variant="outline" className="h-9 bg-white text-xs shadow-none" onClick={()=>setIllustration(!illustration)}>{illustration?<Radio/>:<BookOpen/>}{illustration?"Connect live data":"Preview layout"}</Button><Button className="h-9 bg-emerald-800 text-xs text-white hover:bg-emerald-900" disabled={!feed?.attendance.length || !!error} onClick={exportAttendance}><ArrowDownToLine/>Export attendance</Button></div></div>
+        {illustration && <div role="status" className="flex items-center justify-between gap-4 rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-xs text-amber-900"><span><strong>Illustrative preview.</strong> All names, records, statistics and academic details below are fictional—not live system data.</span><button onClick={()=>setIllustration(false)} className="shrink-0 font-semibold underline">Exit preview</button></div>}
+        {error && <div role="alert" className="flex items-center gap-3 rounded-lg border border-amber-200 bg-amber-50 p-4 text-xs text-amber-950"><WifiOff className="size-4 shrink-0"/><span className="flex-1">{error} {feed?"Values shown are from the last successful update and may be stale.":"No live values are shown."}</span><Button size="sm" variant="outline" onClick={()=>setRetry(r=>r+1)}><RefreshCw/>Retry</Button></div>}
+        <Card className="overflow-hidden rounded-xl border-slate-200/80 py-0 shadow-none"><CardContent className="flex flex-wrap items-stretch justify-between gap-5 p-0"><div className="flex w-full min-w-0 items-center gap-5 p-6 sm:w-auto sm:flex-1"><span className="hidden size-[62px] shrink-0 items-center justify-center rounded-xl border border-emerald-100 bg-emerald-50 text-emerald-800 sm:flex"><GraduationCap className="size-8" strokeWidth={1.5}/></span><div><p className="mb-2 text-[10px] font-semibold tracking-[.16em] text-slate-400">CURRENT EXAMINATION</p><h2 className="text-lg font-semibold tracking-tight">{exam?.course_title || (loading?"Connecting to local session…":"Ready for your next examination")}</h2><div className="mt-2 flex flex-wrap gap-x-5 gap-y-2 text-[11px] text-slate-500"><span className="flex items-center gap-1.5"><MapPin className="size-3.5"/>{exam?.hall || "Venue appears when a session starts"}</span>{exam && <span className="flex items-center gap-1.5"><BookOpen className="size-3.5"/>{exam.course_code}</span>}<span className="flex items-center gap-1.5"><Clock3 className="size-3.5"/>{exam?`${time(exam.starts_at)} – ${time(exam.ends_at)} GMT`:"Offline recognition supported"}</span></div></div></div><div className="flex w-full min-w-[190px] flex-col justify-center border-t border-slate-100 px-6 py-5 sm:w-auto sm:border-t-0 sm:border-l"><Badge variant="outline" className={`gap-2 rounded-full px-3 py-1.5 text-[11px] font-medium ${active?"border-emerald-200 bg-emerald-50 text-emerald-800":"border-slate-200 bg-slate-50 text-slate-500"}`}><span className={`size-1.5 rounded-full ${active?"bg-emerald-600":"bg-slate-400"}`}/>{error?"API disconnected":statusLabel(live?.status || "idle")}</Badge><span className="mt-2 text-center text-[10px] text-slate-400">{active?`${live?.processed_fps?.toFixed(1) || "0.0"} processing FPS · ByteTrack`:"Waiting for camera worker"}</span></div></CardContent></Card>
+        {live?.error && !error && <p role="alert" className="rounded-lg border border-red-100 bg-red-50 p-4 text-sm text-red-800">Camera worker: {live.error}</p>}
+        <section aria-label="Session statistics" className="grid gap-4 sm:grid-cols-3">
+          {[
+            {title:"Identified students",value:live?.identified_count,icon:UserRoundCheck,detail:"Distinct identities this session",color:"emerald"},
+            {title:"Unidentified now",value:active?live?.unidentified_now:0,icon:UserRoundSearch,detail:"Visible unknown tracks · not unique people",color:"amber"},
+            {title:"Marked present",value:live?.present_count,icon:CheckCheck,detail:"Saved for this exam · includes earlier runs",color:"blue"},
+          ].map(stat=><Card key={stat.title} className="gap-0 rounded-xl border-slate-200/80 py-0 shadow-none"><CardContent className="p-5"><div className="flex items-center justify-between"><p className="text-xs font-medium text-slate-500">{stat.title}</p><span className={`grid size-9 place-items-center rounded-lg ${stat.color==="emerald"?"bg-emerald-50 text-emerald-700":stat.color==="amber"?"bg-amber-50 text-amber-600":"bg-blue-50 text-blue-600"}`}><stat.icon className="size-[18px]" strokeWidth={1.7}/></span></div><p className="mt-1 text-[36px] font-semibold leading-[1.4] tracking-[-1.5px] tabular-nums">{!feed || error?"—":stat.value ?? 0}</p><p className="mt-2 text-[10px] text-slate-400">{stat.detail}</p></CardContent></Card>)}
+        </section>
+        <div className="grid items-start gap-6 2xl:grid-cols-[1fr_340px] lg:grid-cols-[minmax(0,1fr)_300px]">
+          <Card id="students" className="gap-0 overflow-hidden rounded-xl border-slate-200/80 py-0 shadow-none"><div className="flex items-start justify-between px-6 pt-6"><div><h2 className="text-sm font-semibold">Recognized students</h2><p className="mt-1.5 text-[11px] text-slate-400">Live identifications and saved examination attendance</p></div><Badge variant="outline" className="rounded-md border-slate-200 text-[10px] font-normal text-slate-500">{feed?students.length:"—"} students</Badge></div><div className="mt-6 flex flex-wrap items-center justify-between gap-3 border-b px-6 pb-4"><div className="flex gap-1 rounded-lg bg-slate-100 p-1"><button onClick={()=>setTab("all")} className={`rounded-md px-3 py-1.5 text-[11px] font-medium ${tab==="all"?"bg-white shadow-xs":"text-slate-500"}`}>All recognized</button><button onClick={()=>setTab("present")} className={`rounded-md px-3 py-1.5 text-[11px] font-medium ${tab==="present"?"bg-white shadow-xs":"text-slate-500"}`}>Present</button></div><div className="relative w-full sm:w-[190px]"><Search className="absolute left-2.5 top-2.5 size-3.5 text-slate-400"/><Input value={query} onChange={e=>setQuery(e.target.value)} aria-label="Search students" placeholder="Search name or index…" className="h-8 rounded-lg border-slate-200 pl-8 text-[11px] shadow-none"/></div></div>
+          <div className="overflow-x-auto"><table className="w-full text-left"><thead className="bg-slate-50/70 text-[9px] tracking-wider text-slate-400 uppercase"><tr><th className="px-6 py-3 font-medium">Student</th><th className="hidden px-3 py-3 font-medium md:table-cell">Time · GMT</th><th className="px-4 py-3 font-medium">Attendance</th><th className="w-8"><span className="sr-only">Details</span></th></tr></thead><tbody>{students.map(student=>{
+            const record=feed?.attendance.find(r=>r.student_no===student.student_no);
+            const recognized=live?.events.filter(e=>e.student_no===student.student_no && e.kind==="identified").at(-1);
+            return <tr key={student.student_no} className="group border-t border-slate-100 hover:bg-slate-50/70"><td className="px-6 py-[18px]"><button onClick={()=>setSelected(student)} className="flex items-center gap-3 text-left outline-offset-4"><Avatar name={student.full_name}/><span><span className="block text-xs font-medium group-hover:text-emerald-800">{student.full_name}</span><span className="mt-1 block text-[10px] text-slate-400">{student.student_no}</span></span></button></td><td className="hidden px-3 text-[11px] tabular-nums text-slate-500 md:table-cell">{time(recognized?.at || record?.recorded_at)}</td><td className="px-4"><span className={`inline-flex items-center gap-1.5 rounded-md px-2 py-1 text-[10px] ${record?"bg-emerald-50 text-emerald-800":"bg-amber-50 text-amber-800"}`}>{record?<Check className="size-3"/>:<Clock3 className="size-3"/>}{record?"Present":"Not recorded"}</span></td><td className="pr-4"><button onClick={()=>setSelected(student)} aria-label={`View ${student.full_name}`} className="rounded p-1 text-slate-300 hover:bg-slate-100 hover:text-emerald-800"><ChevronRight className="size-4"/></button></td></tr>;
+          })}</tbody></table></div>
+          {!students.length && <div className="flex min-h-[248px] flex-col items-center justify-center px-6 text-center"><span className="mb-4 grid size-12 place-items-center rounded-full border border-dashed border-slate-200 bg-slate-50"><ScanFace className="size-6 text-slate-400" strokeWidth={1.4}/></span><p className="text-sm font-medium">{query?"No matching students":loading?"Connecting to attendance data…":"Your next recognition appears here"}</p><p className="mt-2 max-w-[280px] text-xs leading-5 text-slate-400">{query?"Try another name or index number.":"Start the local camera session. Recognized students and saved attendance will update automatically."}</p></div>}
+          <div className="flex items-center justify-between border-t border-slate-100 px-6 py-4 text-[10px] text-slate-400"><span>{students.length?`Showing ${students.length} students`:"No student records to display"}</span><span className="flex items-center gap-1.5"><RefreshCw className="size-3"/>Updates every 2s</span></div></Card>
+          <Card id="activity" className="gap-0 overflow-hidden rounded-xl border-slate-200/80 py-0 shadow-none"><div className="flex items-center justify-between border-b border-slate-100 p-5"><h2 className="text-sm font-semibold">Recognition activity</h2><span className={`flex items-center gap-1.5 text-[10px] ${active?"text-emerald-700":"text-slate-400"}`}><Radio className="size-3.5"/>{active?"Live":"Standby"}</span></div><div className="max-h-[390px] overflow-y-auto px-5 py-2" aria-live="off">{live?.events.length ? [...live.events].reverse().slice(0,30).map(event=><div key={event.id} className="relative flex gap-3 border-b border-slate-100 py-4 last:border-0"><span className={`mt-0.5 grid size-7 shrink-0 place-items-center rounded-full ${["present","identified","already_present"].includes(event.kind)?"bg-emerald-50 text-emerald-700":event.kind==="unknown"?"bg-amber-50 text-amber-600":"bg-slate-100 text-slate-400"}`}>{event.kind==="unknown"?<UserRoundSearch className="size-3.5"/>:event.kind==="present"?<Check className="size-3.5"/>:<ScanFace className="size-3.5"/>}</span><div className="min-w-0 flex-1"><p className="truncate text-[11px] font-medium">{nameFor(event.student_no) || (event.track_id?`Face track #${event.track_id}`:"Camera session")}</p><p className="mt-1 text-[10px] leading-4 text-slate-500">{eventLabel(event.kind)}</p>{event.reasons && <p className="mt-1 text-[10px] text-amber-700">{event.reasons.join(" · ")}</p>}</div><span className="mt-0.5 text-[9px] tabular-nums text-slate-400">{time(event.at)}</span></div>):<div className="flex min-h-[250px] flex-col items-center justify-center text-center"><Activity className="mb-4 size-7 text-slate-300" strokeWidth={1.3}/><p className="text-xs font-medium text-slate-500">Listening for recognition events</p><p className="mt-2 text-[11px] leading-5 text-slate-400">Camera activity will appear here<br/>when a session is running.</p></div>}</div><div className="flex items-center gap-2 border-t bg-slate-50/60 px-5 py-3 text-[9px] text-slate-400"><span className={`size-1.5 rounded-full ${active?"bg-emerald-500":"bg-slate-300"}`}/>{active?"Recognition engine running":"Recognition engine on standby"}</div></Card>
+        </div>
+        <div className="flex flex-wrap items-center justify-between gap-3 border-t border-slate-200/70 pt-5 text-[10px] text-slate-400"><span className="flex items-center gap-1.5"><ShieldCheck className="size-3.5"/>Face recognition & automated examination attendance</span><span>{illustration?"Illustrative data only":error?"Connection interrupted":live?.updated_at?`Last updated ${time(live.updated_at)} GMT`:"Waiting for local session"}<span className="mx-2">·</span>InsightFace + ByteTrack</span></div>
+      </main>
+    </div>
+    <Dialog open={!!selected} onOpenChange={open=>!open && setSelected(null)}><DialogContent><DialogTitle className="text-lg font-semibold">Student details</DialogTitle><DialogDescription className="mt-2 text-xs leading-5 text-slate-500">Identity linked to the enrollment record. Academic fields are locally supplied, not university-verified.</DialogDescription>{selected && <><div className="mt-8 flex flex-col items-center rounded-xl bg-slate-50 p-6"><Avatar name={selected.full_name} large/><p className="mt-4 text-lg font-semibold">{selected.full_name}</p><p className="mt-1 text-xs text-slate-500">{selected.student_no}</p><Badge className={`mt-4 ${selectedRecord?"bg-emerald-100 text-emerald-900":"bg-amber-100 text-amber-900"}`}>{selectedRecord?"Present":"Identified · attendance not recorded"}</Badge><p className="mt-3 text-[10px] text-slate-400">Initials shown · portrait not available in this view</p></div><dl className="mt-6 divide-y divide-slate-100">{[["Programme",selected.programme],["Level / year",selected.level],["Department","Not supplied"],["Examination",exam?.course_title || "—"],["Building / venue",exam?.hall || "—"],["Recognized at",time(selectedRecognition?.at)],["Attendance recorded",time(selectedRecord?.recorded_at)],["Face samples",selected.face_samples],["Source",selectedRecord?.source || "Not recorded"]].map(([label,value])=><div key={String(label)} className="flex justify-between gap-5 py-3.5 text-xs"><dt className="shrink-0 text-slate-400">{label}</dt><dd className="text-right font-medium">{value}</dd></div>)}</dl></>}</DialogContent></Dialog>
+    <Dialog open={help} onOpenChange={setHelp}><DialogContent><DialogTitle className="text-lg font-semibold">Your local demonstration</DialogTitle><DialogDescription className="mt-3 text-sm leading-6 text-slate-500">The dashboard reads your PC’s attendance API. It does not open the camera itself.</DialogDescription><ol className="mt-8 space-y-6 text-sm leading-6"><li><strong>1. Start the API</strong><p className="mt-2 rounded-lg bg-slate-50 p-3 font-mono text-xs break-all">uv run --frozen --extra vision uvicorn app.main:app --host 127.0.0.1 --port 8000</p></li><li><strong>2. Start recognition</strong><p className="mt-2 rounded-lg bg-slate-50 p-3 font-mono text-xs break-all">uv run --frozen --extra vision python -m app.vision.attend --exam CS101 --det-size 480 --threads 4</p></li><li className="text-slate-500">Run both commands from the same backend folder. The API and dashboard must stay local; no authentication has been added for public hosting.</li></ol><p className="mt-8 text-xs leading-5 text-slate-400">“Identified” counts distinct session identities. “Present” includes saved records from previous runs of the selected exam. Unknown tracks are not a count of unique people.</p></DialogContent></Dialog>
+  </div>;
+}

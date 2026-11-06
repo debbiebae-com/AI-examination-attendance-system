@@ -5,7 +5,7 @@ import { defineConfig } from "vite"
 
 const backend = process.env.BACKEND_ORIGIN || "http://127.0.0.1:8000"
 const proxy = Object.fromEntries(
-  ["/enroll", "/students", "/exams", "/health"].map((path) => [
+  ["/enroll", "/students", "/exams", "/health", "/live"].map((path) => [
     path,
     { target: backend, changeOrigin: true },
   ]),

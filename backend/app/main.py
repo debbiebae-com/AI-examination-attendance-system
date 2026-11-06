@@ -1,6 +1,6 @@
 from contextlib import asynccontextmanager
 
-from fastapi import Depends, FastAPI, HTTPException
+from fastapi import Depends, FastAPI, HTTPException, Query
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import RedirectResponse
 from fastapi.staticfiles import StaticFiles
@@ -11,6 +11,7 @@ from sqlalchemy.orm import Session
 from app.attendance import NotEligible, UnknownExam, UnknownStudent, mark_attendance
 from app.config import CORS_ORIGINS, ENROLL_DEFAULT_EXAM, ENROLL_MODEL, FRONTEND_DIR
 from app.db import engine, get_session
+from app.live import LiveStore
 from app.models import AttendanceRecord, Base, Exam, FaceEmbedding, Student
 from app.vision.web_enroll import decode_image, enroll_from_photos
 
@@ -73,6 +74,24 @@ class EnrollIn(BaseModel):
 @app.get("/health")
 def health() -> dict[str, str]:
     return {"status": "ok"}
+
+
+@app.get("/live/session")
+def live_session(after: int = Query(default=0, ge=0), session: Session = Depends(get_session)) -> dict:
+    """Local camera session snapshot. Poll with event cursor; reset it if session_id changes."""
+    snapshot = LiveStore().read(after=after)
+    exam_id = snapshot.get("exam_id")
+    exam = session.get(Exam, exam_id) if exam_id is not None else None
+    snapshot["exam"] = None if exam is None else {
+        "id": exam.id, "course_code": exam.course_code,
+        "course_title": exam.course_title, "hall": exam.hall,
+        "starts_at": exam.starts_at.isoformat(), "ends_at": exam.ends_at.isoformat(),
+    }
+    snapshot["present_count"] = session.scalar(
+        select(func.count(AttendanceRecord.id)).where(AttendanceRecord.exam_id == exam_id)
+    ) if exam is not None else 0
+    snapshot["present_count_scope"] = "selected_exam_all_runs"
+    return snapshot
 
 
 @app.get("/exams")

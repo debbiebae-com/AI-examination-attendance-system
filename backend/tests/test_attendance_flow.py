@@ -1,5 +1,7 @@
 import pytest
 
+pytest.importorskip("supervision", reason="ByteTrack requires the vision extra")
+
 from app.vision.attendance_flow import AttendanceDecider, FaceTracker, iou
 
 
@@ -112,3 +114,93 @@ def test_several_faces_are_decided_independently():
     decider.observe(right, is_live=True, student_no="B")
     assert decider.observe(left, is_live=True, student_no="A").action == "confirmed"
     assert decider.observe(right, is_live=True, student_no="B").action == "confirmed"
+
+
+def test_detection_order_changes_preserve_identity():
+    tracker = FaceTracker()
+    left, right = tracker.update([box(0, 0), box(400, 0)])
+    assert tracker.update([box(404, 0), box(4, 0)]) == [right, left]
+
+
+def test_low_confidence_detection_continues_but_cannot_start_track():
+    tracker = FaceTracker()
+    tid = tracker.update([box(0, 0)], [0.9])[0]
+    assert tracker.update([box(3, 0)], [0.3]) == [tid]
+    assert tracker.update([box(6, 0), box(400, 0)], [0.3, 0.3]) == [tid, None]
+
+
+def test_new_face_waits_for_bytetrack_activation():
+    tracker = FaceTracker()
+    tracker.update([])
+    assert tracker.update([box(0, 0)], [0.9]) == [None]
+    assert tracker.update([box(2, 0)], [0.9])[0] is not None
+
+
+def test_brief_occlusion_recovers_track_but_resets_confirmation():
+    tracker = FaceTracker()
+    decider = AttendanceDecider(tracker, confirm_frames=2)
+    tid = tracker.update([box(0, 0)])[0]
+    decider.observe(tid, is_live=None, student_no="A")
+    tracker.update([])
+    assert tracker.update([box(0, 0)])[0] == tid
+    assert decider.observe(tid, is_live=None, student_no="A").action == "checking"
+
+
+def test_changed_identity_after_marking_is_reconfirmed():
+    tracker = FaceTracker()
+    decider = AttendanceDecider(tracker, confirm_frames=2)
+    tid = tracker.update([box(0, 0)])[0]
+    decider.observe(tid, is_live=None, student_no="A")
+    assert decider.observe(tid, is_live=None, student_no="A").action == "confirmed"
+    assert decider.observe(tid, is_live=None, student_no="B").action == "checking"
+    assert decider.observe(tid, is_live=None, student_no="B").student_no == "B"
+    assert tracker.track(tid).marked
+
+
+@pytest.mark.parametrize("is_live,student_no,action", [(None, None, "unknown"), (False, "A", "not_live")])
+def test_marked_track_does_not_hide_unknown_or_not_live(is_live, student_no, action):
+    tracker = FaceTracker()
+    decider = AttendanceDecider(tracker, confirm_frames=1)
+    tid = tracker.update([box(0, 0)])[0]
+    decider.observe(tid, is_live=None, student_no="A")
+    assert decider.observe(tid, is_live=is_live, student_no=student_no).action == action
+    assert not tracker.track(tid).marked
+
+
+def test_known_and_unknown_faces_are_independent():
+    tracker = FaceTracker()
+    decider = AttendanceDecider(tracker, confirm_frames=1)
+    known, unknown = tracker.update([box(0, 0), box(400, 0)])
+    assert decider.observe(known, is_live=None, student_no="A").action == "confirmed"
+    assert decider.observe(unknown, is_live=None, student_no=None).action == "unknown"
+
+
+def test_expired_track_reentry_gets_new_id():
+    tracker = FaceTracker(max_missed=2)
+    tid = tracker.update([box(0, 0)])[0]
+    for _ in range(5):
+        tracker.update([])
+    tracker.update([box(0, 0)])
+    new_id = tracker.update([box(0, 0)])[0]
+    assert new_id is not None and new_id != tid
+
+
+def test_mismatched_scores_rejected():
+    with pytest.raises(ValueError, match="score"):
+        FaceTracker().update([box(0, 0)], [])
+
+
+def test_crossing_trajectories_with_reversed_detection_order():
+    tracker = FaceTracker()
+    expected = None
+    for frame in range(12):
+        # Slight vertical separation keeps two detections observable at crossing.
+        boxes = [box(frame * 20, 0), box(240 - frame * 20, 35)]
+        if frame % 2:
+            boxes.reverse()
+        ids = tracker.update(boxes)
+        if frame % 2:
+            ids.reverse()
+        if expected is None:
+            expected = ids
+        assert ids == expected

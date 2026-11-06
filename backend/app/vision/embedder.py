@@ -72,6 +72,7 @@ class InsightFaceEmbedder:
         det_thresh: float = 0.5,
         liveness: bool = False,
         threads: int | None = None,
+        recognition_only: bool = False,
     ):
         import cv2
         import onnxruntime
@@ -88,6 +89,9 @@ class InsightFaceEmbedder:
         self._app = FaceAnalysis(
             name=model_name,
             providers=["CPUExecutionProvider"],
+            # Attendance needs SCRFD's five alignment points, not the additional
+            # pose/68-point landmark or age/gender networks. Capture keeps them.
+            allowed_modules=["detection", "recognition"] if recognition_only else None,
             addons=["liveness"] if liveness else None,
             liveness_mode="observe",
             sess_options=sess_options,

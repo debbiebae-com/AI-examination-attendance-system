@@ -1,0 +1,19 @@
+export type Exam = {id: number; course_code: string; course_title: string; hall: string; starts_at: string; ends_at: string};
+export type Student = {student_no: string; full_name: string; programme: string; level: number; has_photo: boolean; face_samples: number};
+export type Attendance = {student_no: string; full_name: string; recorded_at: string; confidence: number | null; source: string};
+export type LiveEvent = {id: number; at: string; kind: string; track_id?: number | null; student_no?: string | null; reasons?: string[]; similarity?: number};
+export type Session = {session_id: string | null; status: string; exam?: Exam | null; started_at?: string; updated_at?: string; error?: string | null; identified_count?: number; unidentified_now: number; visible_faces?: number; processed_fps?: number; processing_ms?: number; present_count: number; events: LiveEvent[]};
+export type Feed = {session: Session; students: Student[]; attendance: Attendance[]};
+export const time = (value?: string) => value ? new Date(value.endsWith("Z") || /[+-]\d\d:\d\d$/.test(value) ? value : `${value}Z`).toLocaleTimeString("en-GB", {hour:"2-digit",minute:"2-digit",second:"2-digit",timeZone:"Africa/Accra"}) : "—";
+export const initials = (name: string) => name.trim().split(/\s+/).slice(0,2).map(n => n[0]).join("");
+export const statusLabel = (status: string) => ({running:"Camera active",starting:"Starting camera",stopped:"Session stopped",idle:"No active session",error:"Camera error",disconnected:"Worker disconnected"}[status] || status);
+export const eventLabel = (kind: string) => ({identified:"Identity confirmed",present:"Attendance recorded",already_present:"Already marked present",unknown:"Unidentified face detected",no_embedding:"Face sample unusable",checking:"Verifying identity",not_live:"Liveness check failed",not_eligible:"Attendance not recorded",stopped:"Session stopped",error:"Recognition worker error"}[kind] || kind);
+export function csv(records: Attendance[], exam?: Exam | null) {
+  const cell = (value: unknown) => '"'+String(value ?? "").replace(/^[\s]*[=+@-]/, match => "'"+match).replaceAll('"','""')+'"';
+  return [["Name","Index number","Examination","Recorded at (UTC)","Source","Similarity (not probability)"], ...records.map(r => [r.full_name,r.student_no,exam?.course_code ?? "",r.recorded_at,r.source,r.confidence])].map(row=>row.map(cell).join(",")).join("\r\n");
+}
+export function visibleStudents(feed: Feed, query: string) {
+  const known = new Set([...feed.attendance.map(r=>r.student_no), ...feed.session.events.filter(e=>e.kind==="identified").map(e=>e.student_no)]);
+  const recent = (id: string) => feed.session.events.filter(e=>e.student_no===id).at(-1)?.at || feed.attendance.find(r=>r.student_no===id)?.recorded_at || "";
+  return feed.students.filter(s=>known.has(s.student_no) && `${s.full_name} ${s.student_no} ${s.programme}`.toLowerCase().includes(query.toLowerCase())).sort((a,b)=>recent(b.student_no).localeCompare(recent(a.student_no)));
+}

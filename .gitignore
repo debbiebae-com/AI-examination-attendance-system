@@ -23,3 +23,10 @@ backend/data/*.db
 
 # Real probe photos for accuracy tests (biometric data; keep local)
 backend/data/probes/
+
+# Next.js dashboard generated output
+*.tsbuildinfo
+dashboard/next-env.d.ts
+
+# Consented validation videos, annotations and identity-bearing reports
+backend/data/validation/

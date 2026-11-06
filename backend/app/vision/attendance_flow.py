@@ -1,6 +1,6 @@
 """Live recognition decisions: follow each face across frames and decide when to record attendance.
 
-Pure logic with no camera or database dependency, so it is unit tested. attend.py drives it.
+No camera or database dependency. Tracking uses Supervision ByteTrack (vision extra).
 """
 
 from dataclasses import dataclass
@@ -9,7 +9,6 @@ Box = tuple[float, float, float, float]  # x1, y1, x2, y2
 
 CONFIRM_FRAMES = 3  # consecutive frames a face must match the same student before attendance is recorded
 MAX_MISSED_FRAMES = 10  # frames a face can be out of view before it is forgotten
-MIN_IOU = 0.3  # boxes must overlap at least this much to be the same face
 
 
 def iou(a: Box, b: Box) -> float:
@@ -35,13 +34,26 @@ class _Track:
 
 
 class FaceTracker:
-    """Gives each face a stable id across frames by matching boxes that overlap."""
+    """ByteTrack adapter preserving recognition state independently of motion state.
 
-    def __init__(self, max_missed: int = MAX_MISSED_FRAMES, min_iou: float = MIN_IOU):
+    Supervision provides Kalman prediction and high/low confidence association.
+    Unconfirmed detections return None; never invent IDs for rejected detections.
+    Imports stay lazy so the API can run without the optional vision extra.
+    """
+
+    def __init__(self, max_missed: int = MAX_MISSED_FRAMES,
+                 activation_threshold: float = 0.5):
+        import supervision as sv
+
         self.max_missed = max_missed
-        self.min_iou = min_iou
+        self._sv = sv
+        self._tracker = sv.ByteTrack(
+            track_activation_threshold=activation_threshold,
+            lost_track_buffer=max_missed,
+            frame_rate=30,  # buffer measured in processed updates, not camera FPS
+            minimum_consecutive_frames=1,
+        )
         self._tracks: dict[int, _Track] = {}
-        self._next_id = 1
 
     @property
     def ids(self) -> list[int]:
@@ -50,31 +62,44 @@ class FaceTracker:
     def track(self, track_id: int) -> _Track:
         return self._tracks[track_id]
 
-    def update(self, boxes: list[Box]) -> list[int]:
-        """Match this frame's face boxes to existing tracks. Returns one track id per box, in order."""
-        unmatched = set(self._tracks)
-        ids: list[int] = []
-        for box in boxes:
-            best_id, best = None, self.min_iou
-            for track_id in unmatched:
-                overlap = iou(self._tracks[track_id].box, box)
-                if overlap >= best:
-                    best_id, best = track_id, overlap
-            if best_id is None:
-                best_id = self._next_id
-                self._next_id += 1
-                self._tracks[best_id] = _Track(track_id=best_id, box=box)
-            else:
-                unmatched.discard(best_id)
-                self._tracks[best_id].box = box
-                self._tracks[best_id].missed = 0
-            ids.append(best_id)
+    def update(self, boxes: list[Box], scores: list[float] | None = None) -> list[int | None]:
+        """Return one optional ID per input face, retaining its original order.
 
-        for track_id in unmatched:
-            track = self._tracks[track_id]
+        Detection scores, not recognition similarities, drive ByteTrack association.
+        Missing scores are for synthetic tests only; the camera passes SCRFD scores.
+        """
+        import numpy as np
+
+        if scores is None:
+            scores = [1.0] * len(boxes)
+        if len(scores) != len(boxes):
+            raise ValueError("One detection score is required per box")
+        detections = self._sv.Detections(
+            xyxy=np.asarray(boxes, dtype=np.float32).reshape(-1, 4),
+            confidence=np.asarray(scores, dtype=np.float32),
+            data={"input_index": np.arange(len(boxes))},
+        )
+        tracked = self._tracker.update_with_detections(detections)
+        ids: list[int | None] = [None] * len(boxes)
+        for track in self._tracks.values():
             track.missed += 1
-            if track.missed > self.max_missed:
-                del self._tracks[track_id]
+        for index, tid in zip(tracked.data.get("input_index", []), tracked.tracker_id):
+            index, tid = int(index), int(tid)
+            ids[index] = tid
+            if tid not in self._tracks:
+                self._tracks[tid] = _Track(track_id=tid, box=boxes[index])
+            track = self._tracks[tid]
+            if track.missed > 1:
+                # A gap breaks consecutive recognition evidence, even if motion
+                # tracking correctly recovers the same ID after occlusion.
+                AttendanceDecider._reset(track, "checking")
+            track.box = boxes[index]
+            track.missed = 0
+        for tid in list(self._tracks):
+            if self._tracks[tid].missed:
+                AttendanceDecider._reset(self._tracks[tid], "checking")
+            if self._tracks[tid].missed > self.max_missed:
+                del self._tracks[tid]
         return ids
 
 
@@ -88,14 +113,13 @@ class AttendanceDecider:
     """Decides, per tracked face, when a recognised student should be recorded as present."""
 
     def __init__(self, tracker: FaceTracker, confirm_frames: int = CONFIRM_FRAMES):
+        if confirm_frames < 1:
+            raise ValueError("confirm_frames must be positive")
         self.tracker = tracker
         self.confirm_frames = confirm_frames
 
     def observe(self, track_id: int, *, is_live: bool | None, student_no: str | None) -> Decision:
         track = self.tracker.track(track_id)
-
-        if track.marked:
-            return Decision("marked", track.candidate)
 
         if is_live is False:
             self._reset(track, "not live")
@@ -105,9 +129,13 @@ class AttendanceDecider:
             self._reset(track, "unknown")
             return Decision("unknown")
 
+        if track.marked and student_no == track.candidate:
+            return Decision("marked", track.candidate)
+
         if student_no == track.candidate:
             track.streak += 1
         else:
+            track.marked = False
             track.candidate = student_no
             track.streak = 1
 
@@ -123,6 +151,7 @@ class AttendanceDecider:
 
     @staticmethod
     def _reset(track: _Track, label: str) -> None:
+        track.marked = False
         track.candidate = None
         track.streak = 0
         track.label = label

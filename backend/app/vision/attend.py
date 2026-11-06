@@ -15,12 +15,14 @@ FPS readout is shown.
 
 import argparse
 from datetime import datetime
+from time import perf_counter
 
 import cv2
 from sqlalchemy import select
 
 from app.attendance import NotEligible, mark_attendance
 from app.db import SessionLocal, engine
+from app.live import LivePublisher
 from app.models import Base, Exam, Student
 from app.vision.attendance_flow import CONFIRM_FRAMES, AttendanceDecider, FaceTracker
 from app.vision.camera import CameraReader, FpsMeter
@@ -51,6 +53,7 @@ def record(
     decider: AttendanceDecider,
     names: dict[str, str],
     events: list[str],
+    live: LivePublisher | None = None,
 ) -> None:
     name = names.get(student_no, student_no)
     stamp = datetime.now().strftime("%H:%M:%S")
@@ -64,10 +67,14 @@ def record(
                 source="camera",
             )
         except NotEligible as exc:
+            if live:
+                live.event("not_eligible", track_id=tid, student_no=student_no, reasons=exc.reasons)
             decider.set_label(tid, "not eligible")
             events.append(f"{stamp} {name}: not eligible ({'; '.join(exc.reasons)})")
             return
 
+    if live:
+        live.event("present" if created else "already_present", track_id=tid, student_no=student_no, similarity=score)
     if created:
         decider.set_label(tid, "present")
         events.append(f"{stamp} {name} marked present")
@@ -77,8 +84,10 @@ def record(
     print(events[-1])
 
 
-def draw(image, faces: list[DetectedFace], ids: list[int], tracker: FaceTracker, decider: AttendanceDecider, names: dict[str, str], events: list[str], fps: float = 0.0) -> None:
+def draw(image, faces: list[DetectedFace], ids: list[int | None], tracker: FaceTracker, decider: AttendanceDecider, names: dict[str, str], events: list[str], fps: float = 0.0) -> None:
     for face, tid in zip(faces, ids):
+        if tid is None:
+            continue
         track = tracker.track(tid)
         x1, y1, x2, y2 = (int(v) for v in face.bbox)
         who = names.get(track.candidate, track.candidate) if track.candidate else ""
@@ -101,6 +110,12 @@ def main() -> None:
     parser.add_argument("--margin", type=float, default=DEFAULT_MARGIN)
     parser.add_argument("--confirm", type=int, default=CONFIRM_FRAMES, help="frames a match must hold")
     parser.add_argument("--det-size", type=int, default=640, help="detector resolution (lower = faster, may miss distant faces)")
+    parser.add_argument("--det-threshold", type=float, default=0.1,
+                        help="SCRFD confidence floor; retain low-score faces for ByteTrack")
+    parser.add_argument("--track-threshold", type=float, default=0.5,
+                        help="ByteTrack high-confidence association threshold")
+    parser.add_argument("--track-buffer", type=int, default=10,
+                        help="processed frames to retain a missing track")
     parser.add_argument("--threads", type=int, default=None, help="onnxruntime CPU threads")
     parser.add_argument(
         "--model",
@@ -113,6 +128,10 @@ def main() -> None:
         help="enable the passive liveness model (off by default; it is unreliable on some cameras)",
     )
     args = parser.parse_args()
+    if not 0.1 <= args.det_threshold < args.track_threshold <= 0.9:
+        parser.error("require 0.1 <= --det-threshold < --track-threshold <= 0.9")
+    if args.confirm < 1 or args.track_buffer < 1:
+        parser.error("--confirm and --track-buffer must be positive")
 
     Base.metadata.create_all(engine)
     with SessionLocal() as session:
@@ -127,75 +146,91 @@ def main() -> None:
     if len(matcher) == 0:
         raise SystemExit("No enrolled faces found. Run the capture or photo enrollment first.")
 
-    print(f"Exam {args.exam}: {exam_title}. {len(matcher)} face samples loaded.")
-    print("Loading InsightFace...")
-    if args.liveness:
-        print("Passive liveness check: ON")
-    else:
-        print("Passive liveness check: OFF (recognition only)")
-    embedder = InsightFaceEmbedder(
-        model_name=args.model,
-        liveness=args.liveness,
-        det_size=(args.det_size, args.det_size),
-        threads=args.threads,
-    )
+    with LivePublisher(exam_id) as live:
+        print(f"Exam {args.exam}: {exam_title}. {len(matcher)} face samples loaded.")
+        print("Loading InsightFace...")
+        if args.liveness:
+            print("Passive liveness check: ON")
+        else:
+            print("Passive liveness check: OFF (recognition only)")
+        embedder = InsightFaceEmbedder(
+            model_name=args.model,
+            liveness=args.liveness,
+            det_size=(args.det_size, args.det_size),
+            threads=args.threads,
+            det_thresh=args.det_threshold,
+            recognition_only=True,
+        )
 
-    tracker = FaceTracker()
-    decider = AttendanceDecider(tracker, confirm_frames=args.confirm)
-    camera = cv2.VideoCapture(args.camera)
-    if not camera.isOpened():
-        raise SystemExit(f"Cannot open camera {args.camera}. Try --camera 1.")
-    try:
-        camera.set(cv2.CAP_PROP_BUFFERSIZE, 1)
-    except Exception:
-        pass
+        tracker = FaceTracker(max_missed=args.track_buffer, activation_threshold=args.track_threshold)
+        decider = AttendanceDecider(tracker, confirm_frames=args.confirm)
+        camera = cv2.VideoCapture(args.camera)
+        if not camera.isOpened():
+            raise SystemExit(f"Cannot open camera {args.camera}. Try --camera 1.")
+        try:
+            camera.set(cv2.CAP_PROP_BUFFERSIZE, 1)
+        except Exception:
+            pass
 
-    reader = CameraReader(camera).start()
-    fps_meter = FpsMeter()
-    last_seq = -1
-    events: list[str] = []
-    try:
-        while True:
-            if reader.error:
-                raise SystemExit(reader.error)
-            seq_id, frame = reader.read()
-            if frame is None or seq_id == last_seq:
-                if cv2.waitKey(5) & 0xFF == ord("q"):
+        reader = CameraReader(camera).start()
+        fps_meter = FpsMeter()
+        last_seq = -1
+        events: list[str] = []
+        try:
+            while True:
+                if reader.error:
+                    raise SystemExit(reader.error)
+                seq_id, frame = reader.read()
+                if frame is None or seq_id == last_seq:
+                    if cv2.waitKey(5) & 0xFF == ord("q"):
+                        break
+                    continue
+                last_seq = seq_id
+                image = cv2.flip(frame, 1)
+
+                began = perf_counter()
+                states = {}
+                faces = embedder.analyse(image)
+                ids = tracker.update([tuple(face.bbox) for face in faces], [face.score for face in faces])
+                for face, tid in zip(faces, ids):
+                    if tid is None:
+                        continue
+                    student_no, score = None, 0.0
+                    if face.embedding is not None:
+                        result = matcher.match(face.embedding)
+                        student_no, score = result.student_no, result.score
+                    decision = decider.observe(tid, is_live=face.is_live, student_no=student_no)
+                    action = decision.action
+                    if face.embedding is None and action == "unknown":
+                        action = "no_embedding"
+                    live.observe(tid, action, decision.student_no)
+                    states[tid] = action
+                    if decision.action == "confirmed":
+                        record(
+                            exam_id=exam_id,
+                            student_no=decision.student_no,
+                            score=score,
+                            tid=tid,
+                            decider=decider,
+                            names=names,
+                            events=events,
+                            live=live,
+                        )
+
+                # Bound overlay history separately from the structured event ring.
+                del events[:-MAX_EVENTS_SHOWN]
+                live.frame(visible_faces=len(faces), states=states, fps=fps_meter.fps,
+                           processing_ms=(perf_counter() - began) * 1000)
+                draw(image, faces, ids, tracker, decider, names, events, fps_meter.fps)
+                cv2.imshow(WINDOW, image)
+                fps_meter.tick()
+                if cv2.waitKey(1) & 0xFF == ord("q"):
                     break
-                continue
-            last_seq = seq_id
-            image = cv2.flip(frame, 1)
+        finally:
+            reader.stop()
+            cv2.destroyAllWindows()
 
-            faces = embedder.analyse(image)
-            ids = tracker.update([tuple(face.bbox) for face in faces])
-            for face, tid in zip(faces, ids):
-                student_no, score = None, 0.0
-                if face.embedding is not None:
-                    result = matcher.match(face.embedding)
-                    student_no, score = result.student_no, result.score
-                decision = decider.observe(tid, is_live=face.is_live, student_no=student_no)
-                if decision.action == "confirmed":
-                    record(
-                        exam_id=exam_id,
-                        student_no=decision.student_no,
-                        score=score,
-                        tid=tid,
-                        decider=decider,
-                        names=names,
-                        events=events,
-                    )
-
-            draw(image, faces, ids, tracker, decider, names, events, fps_meter.fps)
-            cv2.imshow(WINDOW, image)
-            fps_meter.tick()
-            if cv2.waitKey(1) & 0xFF == ord("q"):
-                break
-    finally:
-        reader.stop()
-        cv2.destroyAllWindows()
-
-    present = sum(1 for line in events if "marked present" in line)
-    print(f"Stopped. {present} student(s) marked present in this session.")
+        print(f"Stopped. {len(live.identified)} distinct student(s) identified in this session.")
 
 
 if __name__ == "__main__":

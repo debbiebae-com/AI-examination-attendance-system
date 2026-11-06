@@ -230,3 +230,84 @@ Run it again. It prints each photo's outcome and a threshold sweep, showing how 
 
 - Attendance times are stored as UTC. Ghana (Accra) is UTC+0 year-round, so no conversion is needed for display.
 - Duplicate attendance is blocked twice: a check in `mark_attendance()` and a unique constraint on `(exam_id, student_id)` in the database.
+
+## ByteTrack attendance tracking
+
+The attendance camera now uses Supervision's ByteTrack implementation (Kalman motion
+prediction and high/low-confidence association), separately from InsightFace identity matching.
+Install the updated locked vision extra before running:
+
+```powershell
+uv sync --frozen --extra vision
+uv run --frozen --extra vision python -m app.vision.attend --exam CS101
+```
+
+Attendance-specific settings:
+- `--det-threshold 0.1`: SCRFD detection floor, retaining weak detections for tracking.
+- `--track-threshold 0.5`: ByteTrack high-confidence threshold. A new track needs a
+  score above this plus 0.1; low-confidence detections can continue existing tracks.
+- `--track-buffer 10`: missing **processed frames** before local recognition state expires.
+- `--confirm 3`: consecutive identity matches needed before attendance marking.
+
+Detections awaiting ByteTrack activation are not used to mark attendance. A missing observation,
+unknown match, negative liveness result, or changed identity resets identity confirmation.
+A recovered track must reconfirm; the database still prevents duplicate attendance.
+Tracking IDs are not student identities and do not establish unique unknown-person counts.
+
+The synthetic regression suite covers two-face crossings, reordered detections, low-confidence
+association, brief occlusion, expiry/re-entry and changed identity after attendance confirmation.
+Real-camera crowd accuracy and speed still require measurements on the demonstration PC.
+
+## Local live-session feed
+
+The attendance CLI now publishes a bounded session snapshot to
+`backend/data/live_session.db`. The API reads that same file across processes; no
+internet, cloud service or second camera connection is involved. Run both commands
+from the **same backend checkout**, in two PowerShell windows:
+
+```powershell
+# Window 1 — API (local access only)
+uv run --frozen --extra vision uvicorn app.main:app --host 127.0.0.1 --port 8000
+
+# Window 2 — attendance, retaining the tested speed settings
+uv run --frozen --extra vision python -m app.vision.attend --exam CS101 --det-size 480 --threads 4
+```
+
+Open `http://127.0.0.1:8000/live/session` to inspect the JSON feed. This is the
+connection for the upcoming dashboard, not the dashboard itself. Netlify enrollment
+continues unchanged and does not receive the local feed.
+
+The snapshot includes exam details, camera worker status, session UUID, UTC times,
+processed FPS, processing milliseconds, distinct identities confirmed this session,
+currently visible unknown tracks (0.5-second grace), and saved attendance count for
+the **selected exam across all runs**. Unknown tracks are not unique people. A face
+without a usable embedding is reported separately, not counted as an unknown match.
+
+Poll `/live/session?after=EVENT_ID` for new events. Retain `session_id`; when it changes,
+reset the cursor to zero and refetch. Only the most recent 100 events are retained;
+`events_truncated` signals a cursor gap. Repeated frame states are debounced. Events
+include identification, checking, unknown/no-embedding/not-live states, successful
+attendance, already-present and eligibility refusals. A worker exception sets error
+status; `q` or Ctrl+C sets stopped. A killed/unresponsive process is reported as
+`disconnected` after 120 seconds without a publication. During initial model loading
+status is starting; a first-time download taking over 120 seconds may appear disconnected
+until processing begins. A second CLI cannot claim a fresh active session.
+
+Publishing is throttled to at most twice per second during normal frames. No photos or
+embeddings are copied into the session file. It does contain identity numbers and should
+stay local (all `.db` files are ignored by Git). This is a local demo feed without
+new authentication; do not expose the API publicly. Historical saved attendance is
+not deleted when a new live session begins.
+
+## Multi-person validation
+
+See [the validation checklist](../docs/VALIDATION.md) for real-camera walking/crossing/unknown
+trials and an optional read-only video evaluator:
+
+```powershell
+uv run --frozen --extra vision python -m app.vision.validate_video --video data/validation/entry.mp4 --annotations data/validation/labels.json --output data/validation/report-480.json
+```
+
+Supply consented footage and manually verified bounding-box labels. This measures recorded
+recognition outcomes and processing time without changing attendance. It does not substitute
+for a live camera trial: replay processes every frame while live capture drops stale frames.
