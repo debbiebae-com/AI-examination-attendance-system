@@ -18,6 +18,7 @@ def api(session, tmp_path, monkeypatch):
     manager.stop_path = tmp_path / "camera.stop"
     monkeypatch.setattr(control, "jobs", manager)
     monkeypatch.setattr(control, "plans", {})
+    monkeypatch.setattr(control, "presentation_plans", {})
     app.dependency_overrides[get_session] = lambda: session
     client = TestClient(app)
     client.headers["X-Local-Control"] = control.control_key()
@@ -198,3 +199,105 @@ def test_classroom_mode_is_an_overlay_flag_not_a_new_exam(api, session, monkeypa
     assert "--demo-classroom" in calls[0]
     assert "--exam" in calls[0] and "--det-size" in calls[0]
     assert session.scalar(select(func.count(Exam.id)))==before
+
+
+def presentation_preview(api, session, action):
+    exam = session.scalar(select(Exam).where(Exam.course_code == "CS101"))
+    exam_id = exam.id
+    session.rollback()
+    response = api.post("/control/presentation/preview", json={"exam_id": exam_id, "action": action})
+    assert response.status_code == 200, response.text
+    return response.json()
+
+
+def presentation_confirm(api, plan):
+    return api.post("/control/presentation/confirm", json={"token": plan["token"], "confirmation": "CONFIRM"})
+
+
+def test_presentation_register_all_is_previewed_idempotent_and_preserves_flags(api, session):
+    flags = list(session.execute(select(Student.id, Student.fees_cleared, Student.suspended)))
+    plan = presentation_preview(api, session, "register_all")
+    assert plan["counts"]["volunteers"] == 20
+    assert presentation_confirm(api, plan).status_code == 200
+    assert list(session.execute(select(Student.id, Student.fees_cleared, Student.suspended))) == flags
+    again = presentation_preview(api, session, "register_all")
+    assert again["counts"]["new_registrations"] == 0
+    assert presentation_confirm(api, again).status_code == 200
+    assert presentation_confirm(api, again).status_code == 409
+
+
+def test_classroom_clear_preserves_everything_else_and_allows_repeat_attendance(api, session):
+    from app.attendance import mark_attendance
+    exams = list(session.scalars(select(Exam).order_by(Exam.id)))
+    classroom = next(e for e in exams if e.course_code == "CS101")
+    other = next(e for e in exams if e.id != classroom.id)
+    person = session.scalar(select(Student).where(Student.student_no == "UGS-26-001"))
+    if not session.scalar(select(Registration).where(Registration.exam_id == other.id, Registration.student_id == person.id)):
+        session.add(Registration(exam_id=other.id, student_id=person.id))
+    session.add(FaceEmbedding(student_id=person.id, embedding=b"test", source_photo="test", det_score=1))
+    session.commit()
+    mark_attendance(session, exam_id=classroom.id, student_no=person.student_no)
+    mark_attendance(session, exam_id=other.id, student_no=person.student_no)
+    classroom_id, other_id, student_no = classroom.id, other.id, person.student_no
+    counts = [session.scalar(select(func.count(model.id))) for model in (Student, Registration, FaceEmbedding, Exam)]
+    plan = presentation_preview(api, session, "clear_attendance")
+    assert plan["counts"] == {"attendance_records": 1}
+    assert session.scalar(select(func.count(AttendanceRecord.id))) == 2
+    session.rollback()
+    assert presentation_confirm(api, plan).status_code == 200
+    assert session.scalar(select(func.count(AttendanceRecord.id)).where(AttendanceRecord.exam_id == classroom_id)) == 0
+    assert session.scalar(select(func.count(AttendanceRecord.id)).where(AttendanceRecord.exam_id == other_id)) == 1
+    assert [session.scalar(select(func.count(model.id))) for model in (Student, Registration, FaceEmbedding, Exam)] == counts
+    _, created = mark_attendance(session, exam_id=classroom_id, student_no=student_no, source="camera")
+    assert created
+
+
+@pytest.mark.parametrize("action", ["register_all", "clear_attendance", "reset_display"])
+def test_presentation_refuses_active_recognition_or_task(api, session, monkeypatch, action):
+    plan = presentation_preview(api, session, action)
+    monkeypatch.setattr(control, "LiveStore", lambda: SimpleNamespace(read=lambda: {"status": "running"}))
+    assert presentation_confirm(api, plan).status_code == 409
+    assert api.post("/control/presentation/preview", json={"exam_id": 1, "action": action}).status_code == 409
+    monkeypatch.setattr(control, "LiveStore", lambda: SimpleNamespace(read=lambda: {"status": "idle"}))
+    control.jobs.process = SimpleNamespace(poll=lambda: None)
+    assert presentation_confirm(api, plan).status_code == 409
+
+
+def test_presentation_rejects_changed_expired_unconfirmed_or_wrong_scope(api, session, monkeypatch):
+    plan = presentation_preview(api, session, "clear_attendance")
+    assert api.post("/control/presentation/confirm", json={"token": plan["token"], "confirmation": "no"}).status_code == 400
+    from app.attendance import mark_attendance
+    mark_attendance(session, exam_id=1, student_no="UGS-26-001")
+    assert presentation_confirm(api, plan).status_code == 409
+    plan = presentation_preview(api, session, "register_all")
+    session.add(Student(student_no="NEW", full_name="New volunteer", programme="Computer Science", level=300, fees_cleared=True, suspended=False))
+    session.commit()
+    assert presentation_confirm(api, plan).status_code == 409
+    plan = presentation_preview(api, session, "register_all")
+    expiry, selection, snapshot = control.presentation_plans[plan["token"]]
+    control.presentation_plans[plan["token"]] = (0, selection, snapshot)
+    assert presentation_confirm(api, plan).status_code == 409
+    assert api.post("/control/presentation/preview", json={"exam_id": 2, "action": "clear_attendance"}).status_code == 409
+    assert api.post("/control/presentation/preview", json={"exam_id": 1, "action": "delete_everything"}).status_code == 422
+    assert api.post("/control/presentation/preview", json={"exam_id": 1, "action": "clear_attendance"}, headers={"X-Local-Control": "wrong"}).status_code == 403
+
+
+def test_presentation_reset_preserves_saved_attendance(api, session, monkeypatch, tmp_path):
+    from app.live import LiveStore, LivePublisher
+    from app.attendance import mark_attendance
+    store = LiveStore(tmp_path / "live.db")
+    monkeypatch.setattr(control, "LiveStore", lambda: store)
+    mark_attendance(session, exam_id=1, student_no="UGS-26-001")
+    with LivePublisher(1, store=store) as live:
+        live.payload.update(demo_classroom=True, classroom_name="Test classroom 1")
+        live.event("identified", student_no="UGS-26-001")
+    plan = presentation_preview(api, session, "reset_display")
+    assert plan["counts"] == {"activity_events": 2, "identified_count": 1}
+    assert presentation_confirm(api, plan).status_code == 200
+    snapshot = store.read()
+    assert snapshot["events"] == []
+    assert snapshot["identified_count"] == 0
+    assert snapshot["status"] == "idle"
+    assert snapshot["exam_id"] == 1
+    assert snapshot["classroom_name"] == "Test classroom 1"
+    assert session.scalar(select(func.count(AttendanceRecord.id))) == 1

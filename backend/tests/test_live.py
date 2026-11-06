@@ -2,6 +2,7 @@ import time
 
 import pytest
 from fastapi.testclient import TestClient
+from fastapi import HTTPException
 
 from app.live import LivePublisher, LiveStore, MAX_EVENTS, STALE_SECONDS
 from app.main import app
@@ -125,3 +126,23 @@ def test_publication_is_readable_from_another_process(tmp_path):
         assert data["session_id"] == live.payload["session_id"]
         assert data["identified_count"] == 1
         assert data["exam_id"] == 42
+
+
+def test_reset_live_snapshot_is_atomic_and_does_not_erase_new_session(tmp_path):
+    store = LiveStore(tmp_path / "live.db")
+    with LivePublisher(1, store=store):
+        active = store.read()
+        version = [active.get(k) for k in ("session_id", "updated_at", "latest_event_id")]
+        with pytest.raises(HTTPException, match="409"):
+            store.reset_display(version)
+    stopped = store.read()
+    version = [stopped.get(k) for k in ("session_id", "updated_at", "latest_event_id")]
+    with LivePublisher(1, store=store):
+        with pytest.raises(HTTPException, match="409"):
+            store.reset_display(version)
+    store.reset_display([store.read().get(k) for k in ("session_id", "updated_at", "latest_event_id")])
+    assert store.read()["events"] == []
+    with LivePublisher(1, store=store) as live:
+        live.event("identified", student_no="AGAIN")
+        live.flush()
+        assert store.read()["identified_count"] == 1

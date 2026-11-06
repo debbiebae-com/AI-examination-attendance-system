@@ -8,7 +8,6 @@ import {
   Settings2,
   Square,
   Trash2,
-  UserRoundCheck,
   RefreshCw,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -41,6 +40,17 @@ type Person = {
   registered: boolean;
   ready: boolean;
   reasons: string[];
+};
+type PresentationAction = "register_all" | "clear_attendance" | "reset_display";
+type PresentationPlan = {
+  token: string;
+  action: PresentationAction;
+  counts: Record<string, number>;
+};
+const presentationLabels = {
+  register_all: "Register all volunteers",
+  clear_attendance: "Clear classroom attendance",
+  reset_display: "Reset live display",
 };
 type Plan = {
   token: string;
@@ -87,6 +97,8 @@ export function DemoControls({
   const [source, setSource] = useState<"pc" | "droidcam">("pc");
   const [captureBackend, setCaptureBackend] = useState("auto");
   const [query, setQuery] = useState("");
+  const [presentationPlan, setPresentationPlan] =
+    useState<PresentationPlan | null>(null);
   const [plan, setPlan] = useState<Plan | null>(null);
   const [confirmation, setConfirmation] = useState("");
   const [refresh, setRefresh] = useState(0);
@@ -98,6 +110,7 @@ export function DemoControls({
     setPeople([]);
     setSelected([]);
     setPlan(null);
+    setPresentationPlan(null);
     async function poll() {
       try {
         const [status, list] = await Promise.all([
@@ -142,6 +155,7 @@ export function DemoControls({
       const result = await api<{ message?: string }>(`control/${path}`, body);
       setNotice(result.message || "Task started. Progress appears below.");
       setPlan(null);
+      setPresentationPlan(null);
       setConfirmation("");
       setSelected([]);
       setRefresh((r) => r + 1);
@@ -152,11 +166,31 @@ export function DemoControls({
       setBusy(false);
     }
   }
+  async function previewPresentation(action: PresentationAction) {
+    setBusy(true);
+    setError("");
+    setNotice("");
+    setPlan(null);
+    setPresentationPlan(null);
+    try {
+      setPresentationPlan(
+        await api<PresentationPlan>("control/presentation/preview", {
+          exam_id: Number(exam),
+          action,
+        }),
+      );
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Preview failed");
+    } finally {
+      setBusy(false);
+    }
+  }
   async function preview(numbers: string[]) {
     setBusy(true);
     setError("");
     setNotice("");
     setPlan(null);
+    setPresentationPlan(null);
     setConfirmation("");
     try {
       setPlan(
@@ -201,6 +235,7 @@ export function DemoControls({
         onOpenChange={(value) => {
           setOpen(value);
           if (!value) {
+            setPresentationPlan(null);
             setPlan(null);
             setConfirmation("");
           }
@@ -467,6 +502,109 @@ export function DemoControls({
               </pre>
             )}
           </div>
+          <section
+            aria-label="Presentation Tools"
+            className="mt-7 border-t pt-6"
+          >
+            <h3 className="text-sm font-semibold">Presentation Tools</h3>
+            <p className="mt-1 text-xs text-muted-foreground">
+              Prepare and manage your ExamLens demonstration. Stop recognition
+              before using these tools.
+            </p>
+            <div className="mt-4 space-y-4">
+              {(
+                [
+                  [
+                    "register_all",
+                    "Registers all locally enrolled volunteers for Test classroom 1. Fee and suspension rules stay unchanged.",
+                  ],
+                  [
+                    "clear_attendance",
+                    "Start another round. Clears only classroom attendance; keeps students, face data and registrations.",
+                  ],
+                  [
+                    "reset_display",
+                    "Clears activity and live counters only. Saved attendance and attendance-based totals stay unchanged.",
+                  ],
+                ] as const
+              ).map(([action, description]) => (
+                <div
+                  key={action}
+                  className="flex flex-wrap items-center justify-between gap-3"
+                >
+                  <p className="max-w-sm text-xs leading-5 text-muted-foreground">
+                    {description}
+                  </p>
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    disabled={locked || !exam}
+                    onClick={() => previewPresentation(action)}
+                  >
+                    {presentationLabels[action]}
+                  </Button>
+                </div>
+              ))}
+            </div>
+            {presentationPlan && (
+              <div
+                role="region"
+                aria-label="Confirm presentation action"
+                className="mt-4 rounded-lg border p-4"
+              >
+                <h4 className="text-sm font-semibold">
+                  Review: {presentationLabels[presentationPlan.action]}
+                </h4>
+                <p className="mt-2 text-xs">
+                  Test classroom 1 · Preview expires after two minutes.
+                </p>
+                <ul className="mt-2 text-xs">
+                  {Object.entries(presentationPlan.counts).map(
+                    ([key, count]) => (
+                      <li key={key}>
+                        {key.replaceAll("_", " ")}: {count}
+                      </li>
+                    ),
+                  )}
+                </ul>
+                <p className="mt-2 text-xs text-muted-foreground">
+                  {presentationPlan.action === "clear_attendance"
+                    ? "Attendance deletion cannot be undone. Students, faces and registrations are preserved. Start recognition again for the next round."
+                    : presentationPlan.action === "reset_display"
+                      ? "Only the live feed and its counters are cleared. Saved attendance is not deleted."
+                      : "Existing registrations are kept; only missing registrations are added."}
+                </p>
+                <div className="mt-3 flex gap-2">
+                  <Button
+                    size="sm"
+                    variant={
+                      presentationPlan.action === "clear_attendance"
+                        ? "destructive"
+                        : "outline"
+                    }
+                    disabled={locked}
+                    onClick={() =>
+                      run("presentation/confirm", {
+                        token: presentationPlan.token,
+                        confirmation: "CONFIRM",
+                      })
+                    }
+                  >
+                    Confirm{" "}
+                    {presentationLabels[presentationPlan.action].toLowerCase()}
+                  </Button>
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    disabled={busy}
+                    onClick={() => setPresentationPlan(null)}
+                  >
+                    Cancel
+                  </Button>
+                </div>
+              </div>
+            )}
+          </section>
           <section className="mt-7 border-t pt-6">
             <div className="flex flex-wrap items-center justify-between gap-3">
               <div>
@@ -574,54 +712,49 @@ export function DemoControls({
                 </p>
               )}
             </div>
-            <div className="mt-4 flex flex-wrap gap-2">
-              <Button
-                size="sm"
-                variant="outline"
-                disabled={locked || !exam || !selected.length}
-                onClick={() =>
-                  run("register", {
-                    exam_id: Number(exam),
-                    student_nos: selected,
-                  })
-                }
-              >
-                <UserRoundCheck />
-                Register selected
-              </Button>
-              <Button
-                size="sm"
-                variant="outline"
-                disabled={locked || !selected.length}
-                onClick={() => preview(selected)}
-              >
-                <Trash2 />
-                Remove selected…
-              </Button>
-              <Button
-                size="sm"
-                variant="outline"
-                disabled={
-                  locked ||
-                  !selected.length ||
-                  selected.length === people.length
-                }
-                onClick={() =>
-                  preview(
-                    people
-                      .filter((p) => !selected.includes(p.student_no))
-                      .map((p) => p.student_no),
-                  )
-                }
-              >
-                Keep only selected…
-              </Button>
-            </div>
-            <p className="mt-3 text-[10px] leading-5 text-muted-foreground">
-              Registration does not change fee/suspension flags. Removal deletes
-              local students, face embeddings, registrations and attendance.
-              Exams and Supabase inbox submissions are preserved.
-            </p>
+            <details className="mt-4 rounded-lg border p-3">
+              <summary className="cursor-pointer text-xs font-medium">
+                Advanced student deletion
+              </summary>
+              <p className="mt-2 text-xs text-muted-foreground">
+                These tools permanently delete student data, not just
+                attendance. Select volunteers above before proceeding.
+              </p>
+              <div className="mt-3 flex flex-wrap gap-2">
+                <Button
+                  size="sm"
+                  variant="outline"
+                  disabled={locked || !selected.length}
+                  onClick={() => preview(selected)}
+                >
+                  <Trash2 />
+                  Remove selected…
+                </Button>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  disabled={
+                    locked ||
+                    !selected.length ||
+                    selected.length === people.length
+                  }
+                  onClick={() =>
+                    preview(
+                      people
+                        .filter((p) => !selected.includes(p.student_no))
+                        .map((p) => p.student_no),
+                    )
+                  }
+                >
+                  Delete other students…
+                </Button>
+              </div>
+              <p className="mt-3 text-[10px] leading-5 text-muted-foreground">
+                Registration does not change fee/suspension flags. Removal
+                deletes local students, face embeddings, registrations and
+                attendance. Exams and Supabase inbox submissions are preserved.
+              </p>
+            </details>
           </section>
           {plan && (
             <section

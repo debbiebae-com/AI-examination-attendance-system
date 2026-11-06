@@ -355,3 +355,17 @@ available for real attendance/export scope: CSV exports are not relabelled as th
 per-person exams. CLI recognition without `--demo-classroom` retains its existing real-exam
 header and does not add fictional exam labels. Camera/backend/phone capture settings and
 recognition thresholds are unchanged.
+
+### Presentation Tools — Stage 1
+
+In **Demo controls → Presentation Tools**, stop recognition before preparing or resetting a round:
+
+- **Register all volunteers** previews the locally stored volunteer count and missing registrations, then adds only missing registrations to Test classroom 1's backing exam. It does not change fee/suspension flags or enroll faces.
+- **Clear classroom attendance** previews and deletes attendance only for the classroom backing exam. Students, face samples, registrations, exams, and other exams' attendance remain intact. Start recognition again for a fresh round; a volunteer can then be recorded again. Export attendance first if you need to keep a round's results.
+- **Reset live display** previews activity-event and identified counts and clears only the stopped live snapshot. Saved attendance and attendance-based totals remain unchanged. Classroom/exam context is retained.
+
+Every action requires explicit confirmation of a two-minute, single-use preview. Changed records invalidate the preview. Recognition and other active demo tasks block these actions, including externally started live sessions. Do not run a separate recognition CLI concurrently with dashboard preparation.
+
+Student deletion is separate, under **Advanced student deletion**. **Delete other students…** replaces the old “Keep only selected…” wording and still previews the unselected people, with typed `DELETE` confirmation. It deletes student data; it is not an attendance reset.
+
+Readiness-check and diagnostic-report buttons are deferred to Stage 2. Existing camera configuration and recognition behavior are unchanged.

@@ -293,3 +293,76 @@ def confirm_delete(body: DeleteConfirmation, session: Session = Depends(get_sess
             session.rollback()
             raise
         return {"deleted": counts.students, "message": "Selected students and their local face samples, registrations and attendance were removed. Exams preserved."}
+
+# Short-lived, one-use previews for the three presentation actions.
+presentation_plans = {}
+
+
+class PresentationSelection(ExamSelection):
+    action: Literal["register_all", "clear_attendance", "reset_display"]
+
+
+def presentation_snapshot(session, body):
+    get_exam(session, body.exam_id)
+    classroom = session.scalar(select(Exam).where(Exam.course_code == "CS101")) or session.scalar(select(Exam).order_by(Exam.starts_at))
+    if classroom.id != body.exam_id:
+        raise HTTPException(409, "Classroom backing exam changed; refresh the controls")
+    if body.action == "register_all":
+        students = list(session.scalars(select(Student.id).order_by(Student.id)))
+        registered = list(session.scalars(select(Registration.student_id).where(Registration.exam_id == body.exam_id).order_by(Registration.student_id)))
+        return {"students": students, "registered": registered}, {"volunteers": len(students), "new_registrations": len(set(students) - set(registered))}
+    if body.action == "clear_attendance":
+        ids = [tuple(row) for row in session.execute(select(AttendanceRecord.id, AttendanceRecord.student_id, AttendanceRecord.recorded_at, AttendanceRecord.confidence, AttendanceRecord.source).where(AttendanceRecord.exam_id == body.exam_id).order_by(AttendanceRecord.id))]
+        return ids, {"attendance_records": len(ids)}
+    live = LiveStore().read()
+    return [live.get(k) for k in ("session_id", "updated_at", "latest_event_id")], {"activity_events": len(live.get("events", [])), "identified_count": live.get("identified_count", 0)}
+
+
+@router.post("/presentation/preview", dependencies=[Depends(authorize)])
+def preview_presentation(body: PresentationSelection, session: Session = Depends(get_session)):
+    with jobs.lock:
+        jobs.idle()
+        snapshot, counts = presentation_snapshot(session, body)
+        now = time.monotonic()
+        for token in list(presentation_plans):
+            if presentation_plans[token][0] < now:
+                del presentation_plans[token]
+        if len(presentation_plans) >= 100:
+            presentation_plans.clear()
+        token = secrets.token_urlsafe(32)
+        presentation_plans[token] = (now + 120, body, snapshot)
+        return {"token": token, "action": body.action, "counts": counts, "expires_in": 120}
+
+
+@router.post("/presentation/confirm", dependencies=[Depends(authorize)])
+def confirm_presentation(body: DeleteConfirmation, session: Session = Depends(get_session)):
+    with jobs.lock:
+        jobs.idle()
+        if body.confirmation != "CONFIRM":
+            raise HTTPException(400, "Confirm the presentation action")
+        plan = presentation_plans.pop(body.token, None)
+        if plan is None or plan[0] < time.monotonic():
+            raise HTTPException(409, "Preview expired; review the action again")
+        selection, expected = plan[1:]
+        try:
+            if session.get_bind().dialect.name == "sqlite":
+                session.execute(text("BEGIN IMMEDIATE"))
+            snapshot, counts = presentation_snapshot(session, selection)
+            if snapshot != expected:
+                raise HTTPException(409, "Records changed; review the action again")
+            if selection.action == "register_all":
+                for student_id in set(snapshot["students"]) - set(snapshot["registered"]):
+                    session.add(Registration(student_id=student_id, exam_id=selection.exam_id))
+                message = f'Registered volunteers: {counts["new_registrations"]} new registrations. Eligibility flags unchanged.'
+            elif selection.action == "clear_attendance":
+                from sqlalchemy import delete
+                session.execute(delete(AttendanceRecord).where(AttendanceRecord.exam_id == selection.exam_id))
+                message = f'Cleared {counts["attendance_records"]} classroom attendance records. Students, faces and registrations preserved. Start recognition for a fresh round.'
+            else:
+                LiveStore().reset_display(expected)
+                message = "Live display reset. Saved attendance unchanged."
+            session.commit()
+        except Exception:
+            session.rollback()
+            raise
+        return {"message": message}

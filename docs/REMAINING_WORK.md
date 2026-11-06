@@ -221,3 +221,7 @@ fictional course code/title labels; unknown/checking faces do not get fake ident
 Live header marks the classroom, while registration/eligibility/attendance and CSV scope stay
 on the existing backing record. No cloud enrollment schema changes. User must update/restart
 PC processes to see the new overlays; no new hardware-camera changes were made.
+
+### Presentation tools increment
+- Stage 1 implemented: preview/confirm register all local volunteers, clear classroom backing-exam attendance, and reset stopped live display without deleting saved attendance. Student deletion is separated under Advanced student deletion; “Keep only selected” is renamed “Delete other students”.
+- Stage 2 pending user review: explicit system-readiness check and sanitized diagnostic report copy. Do not add the deferred all-exam reset, selected-attendance reset, automatic retry, or camera-setting persistence.

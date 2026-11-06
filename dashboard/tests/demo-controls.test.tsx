@@ -43,6 +43,17 @@ beforeEach(() => {
           { id: 1, course_code: "CS101", course_title: "Demo examination" },
         ];
       else if (path.includes("readiness")) data = people;
+      else if (path.endsWith("presentation/preview"))
+        data = {
+          token: "presentation-token",
+          action: body.action,
+          counts:
+            body.action === "clear_attendance"
+              ? { attendance_records: 3 }
+              : body.action === "register_all"
+                ? { volunteers: 2, new_registrations: 1 }
+                : { activity_events: 5, identified_count: 2 },
+        };
       else if (path.endsWith("delete/preview"))
         data = {
           token: "preview-token",
@@ -75,6 +86,7 @@ it("requires preview and typed confirmation before removal", async () => {
   await user.click(screen.getByRole("button", { name: "Demo controls" }));
   await screen.findByText("Ama Demo");
   await user.click(screen.getByRole("checkbox", { name: "Select Ama Demo" }));
+  await user.click(screen.getByText("Advanced student deletion"));
   await user.click(screen.getByRole("button", { name: "Remove selected…" }));
   expect(
     await screen.findByRole("region", { name: "Confirm local deletion" }),
@@ -98,7 +110,10 @@ it("keep-only previews the complement, not the selected people", async () => {
   await user.click(screen.getByRole("button", { name: "Demo controls" }));
   await screen.findByText("Ama Demo");
   await user.click(screen.getByRole("checkbox", { name: "Select Ama Demo" }));
-  await user.click(screen.getByRole("button", { name: "Keep only selected…" }));
+  await user.click(screen.getByText("Advanced student deletion"));
+  await user.click(
+    screen.getByRole("button", { name: "Delete other students…" }),
+  );
   expect(requests.at(-1)).toEqual({
     path: "/api/control/delete/preview",
     body: { student_nos: ["VOL-2"] },
@@ -216,4 +231,116 @@ it("replaces examination selection with Test classroom 1 and uses its backing re
     path: "/api/control/camera/start",
     body: { exam_id: 1, camera: 0, demo_classroom: true },
   });
+});
+
+it.each([
+  ["Register all volunteers", "register_all", "new registrations: 1"],
+  ["Clear classroom attendance", "clear_attendance", "attendance records: 3"],
+  ["Reset live display", "reset_display", "activity events: 5"],
+])(
+  "previews and confirms %s without changing camera settings",
+  async (label, action, count) => {
+    const user = userEvent.setup();
+    const onChanged = vi.fn();
+    render(<DemoControls onChanged={onChanged} />);
+    await user.click(screen.getByRole("button", { name: "Demo controls" }));
+    await screen.findByText("Ama Demo");
+    const tools = screen.getByRole("region", { name: "Presentation Tools" });
+    expect(within(tools).getAllByRole("button")).toHaveLength(3);
+    await user.click(within(tools).getByRole("button", { name: label }));
+    expect(requests).toEqual([
+      {
+        path: "/api/control/presentation/preview",
+        body: { exam_id: 1, action },
+      },
+    ]);
+    const review = await screen.findByRole("region", {
+      name: "Confirm presentation action",
+    });
+    expect(within(review).getByText(count)).toBeInTheDocument();
+    await user.click(
+      within(review).getByRole("button", {
+        name: `Confirm ${label.toLowerCase()}`,
+      }),
+    );
+    expect(requests.at(-1)).toEqual({
+      path: "/api/control/presentation/confirm",
+      body: { token: "presentation-token", confirmation: "CONFIRM" },
+    });
+    expect(onChanged).toHaveBeenCalledOnce();
+  },
+);
+
+it("cancels a presentation preview without writing changes", async () => {
+  const user = userEvent.setup();
+  render(<DemoControls onChanged={() => {}} />);
+  await user.click(screen.getByRole("button", { name: "Demo controls" }));
+  await screen.findByText("Ama Demo");
+  await user.click(
+    screen.getByRole("button", {
+      name: "Clear classroom attendance",
+    }),
+  );
+  const review = await screen.findByRole("region", {
+    name: "Confirm presentation action",
+  });
+  await user.click(within(review).getByRole("button", { name: "Cancel" }));
+  expect(requests).toHaveLength(1);
+  expect(
+    screen.queryByRole("region", { name: "Confirm presentation action" }),
+  ).not.toBeInTheDocument();
+});
+
+it("disables all presentation tools while a camera task is running", async () => {
+  const originalFetch = globalThis.fetch;
+  vi.stubGlobal(
+    "fetch",
+    vi.fn(async (path: string, options?: RequestInit) => {
+      if (path.endsWith("control/status"))
+        return {
+          ok: true,
+          json: async () => ({
+            running: true,
+            kind: "camera",
+            log: [],
+            sync_configured: true,
+          }),
+        };
+      return originalFetch(path, options);
+    }),
+  );
+  const user = userEvent.setup();
+  render(<DemoControls onChanged={() => {}} />);
+  await user.click(screen.getByRole("button", { name: "Demo controls" }));
+  await screen.findByText("Ama Demo");
+  const tools = screen.getByRole("region", { name: "Presentation Tools" });
+  for (const button of within(tools).getAllByRole("button"))
+    expect(button).toBeDisabled();
+  expect(requests).toHaveLength(0);
+});
+
+it("shows a failed preview without offering confirmation", async () => {
+  const originalFetch = globalThis.fetch;
+  vi.stubGlobal(
+    "fetch",
+    vi.fn(async (path: string, options?: RequestInit) => {
+      if (path.endsWith("presentation/preview"))
+        return {
+          ok: false,
+          json: async () => ({ detail: "Stop recognition first" }),
+        };
+      return originalFetch(path, options);
+    }),
+  );
+  const user = userEvent.setup();
+  render(<DemoControls onChanged={() => {}} />);
+  await user.click(screen.getByRole("button", { name: "Demo controls" }));
+  await screen.findByText("Ama Demo");
+  await user.click(screen.getByRole("button", { name: "Reset live display" }));
+  expect(await screen.findByRole("alert")).toHaveTextContent(
+    "Stop recognition first",
+  );
+  expect(
+    screen.queryByRole("region", { name: "Confirm presentation action" }),
+  ).not.toBeInTheDocument();
 });
