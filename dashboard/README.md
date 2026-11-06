@@ -94,6 +94,11 @@ claims are made by these UI tests. Real multi-person trials remain necessary.
 
 ## Demo controls — no repeated terminal commands
 
+**Preferred desktop window:** run **Prepare Desktop App.cmd** once, then open the
+**ExamLens Desktop** shortcut or **Start Desktop App.cmd**. It displays this dashboard inside
+Electron and manages its servers. See [desktop instructions](../desktop/README.md).
+The browser-launcher instructions below remain available as a backup.
+
 Windows startup is now clickable. Stop old manually started servers once, then:
 
 1. Double-click **Prepare Demo.cmd** while online. It installs locked dependencies, warms

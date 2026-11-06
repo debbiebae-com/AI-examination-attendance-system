@@ -1,5 +1,9 @@
 # Clickable ExamLens launcher (Windows)
 
+For the Electron desktop window, use **Prepare Desktop App.cmd** then **ExamLens Desktop**
+(or **Start Desktop App.cmd**). See [desktop instructions](../desktop/README.md). The browser
+launcher below remains a backup; desktop startup reuses the same ownership/readiness checks.
+
 This is a local presentation launcher, not an installer or a hosted deployment. It keeps
 this checkout, its working camera setup and its existing local student database. No camera
 connection, source setting, student record or attendance is changed by preparation/startup.

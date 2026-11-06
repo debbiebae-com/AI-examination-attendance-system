@@ -40,7 +40,10 @@ recognition activity, attendance counts, student details, search and a simple CS
 The existing Netlify enrollment app is unchanged. See [dashboard/README.md](dashboard/README.md)
 for dashboard usage and preview-mode limitations.
 
-**Windows presentation startup:** double-click **Prepare Demo.cmd** once while online,
-then **Start Demo.cmd** to open ExamLens without typing server commands. Use **Stop Demo.cmd**
-to shut down. A desktop shortcut is created when possible. See the
-[launcher guide](docs/PRESENTATION_LAUNCHER.md). Connect DroidCam manually as before.
+**Windows desktop app:** double-click **Prepare Desktop App.cmd** once while online,
+then open the **ExamLens Desktop** shortcut (or **Start Desktop App.cmd**). Electron opens
+its own window and automatically starts/stops its managed local services. See
+[desktop app instructions](desktop/README.md). Connect DroidCam manually as before.
+
+The earlier **Prepare Demo / Start Demo / Stop Demo.cmd** browser launcher remains a backup;
+see the [launcher guide](docs/PRESENTATION_LAUNCHER.md).

@@ -243,3 +243,15 @@ waits for demo tasks and only terminates owned process trees. Private logs/state
 ignored. Camera connection and recognition/capture behavior are unchanged. Actual Windows
 launch/duplicate launch/Stop/offline smoke testing remains user-side (Linux sandbox cannot
 execute Win32 process/shortcut APIs). See docs/PRESENTATION_LAUNCHER.md.
+
+## Electron desktop window
+
+Added desktop/ Electron shell, Prepare Desktop App.cmd and Start Desktop App.cmd. Preparation
+creates an ExamLens Desktop shortcut targeting Electron directly; the browser launcher stays
+as backup. Shell uses the prepared checkout/Python/models (no standalone installer), branded
+loading/closing UI, single-instance focus, startup failure dialogs, restricted renderer and
+ownership-scoped shutdown through the shared launcher. Closing during startup waits before
+stopping; slow active tasks keep the app open rather than forcing termination. Native OpenCV
+camera windows and manual DroidCam connection are unchanged. Linux lifecycle tests/syntax,
+PowerShell grammar and npm audit can run here; actual Windows desktop/shortcut/CSV/exit/offline
+smoke tests remain user-side.

@@ -1,6 +1,11 @@
 # Windows PowerShell 5.1+. All paths are relative to this checkout, not the caller's folder.
 [CmdletBinding()]
-param([ValidateSet('Start', 'Prepare', 'Stop')][string]$Mode = 'Start')
+param(
+    [ValidateSet('Start', 'Prepare', 'Stop')][string]$Mode = 'Start',
+    [switch]$Desktop,
+    [switch]$NoBrowser,
+    [ValidatePattern('^$|^[a-f0-9-]{36}$')][string]$Owner = ''
+)
 $ErrorActionPreference = 'Stop'
 $root = $PSScriptRoot
 $runtime = Join-Path $root '.demo-runtime'
@@ -101,6 +106,8 @@ function Get-SourceFingerprint {
         if (Test-Path -LiteralPath $path) { $files += Get-ChildItem -LiteralPath $path -Recurse -File }
     }
     $files += Get-ChildItem -LiteralPath $dashboard -File | Where-Object { $_.Name -notin @('next-env.d.ts', 'tsconfig.tsbuildinfo') }
+    $desktopPath = Join-Path $root 'desktop'
+    if (Test-Path -LiteralPath $desktopPath) { $files += Get-ChildItem -LiteralPath $desktopPath -File }
     $files += Get-ChildItem -LiteralPath (Join-Path $backend 'app') -Recurse -File -Filter '*.py'
     foreach ($path in @('backend/pyproject.toml', 'backend/uv.lock', 'start-demo.ps1')) { $files += Get-Item -LiteralPath (Join-Path $root $path) }
     $lines = @($files | Sort-Object FullName -Unique | ForEach-Object {
@@ -119,6 +126,10 @@ function Start-Server([string]$program, [string[]]$arguments, [string]$directory
     return $entry
 }
 function Stop-Demo($state) {
+    if ($state -and $Owner -and $state.owner -ne $Owner) {
+        Write-Host 'These servers belong to another launch; they were left running.'
+        return
+    }
     if (-not $state) {
         Write-Host 'No launcher-managed servers found. Existing manual servers will not be touched.'
         return
@@ -159,7 +170,10 @@ $locked = $false
 $created = @()
 try {
     try { $locked = $mutex.WaitOne(0) } catch [Threading.AbandonedMutexException] { $locked = $true }
-    if (-not $locked) { Write-Host 'ExamLens is already starting, preparing or stopping. Wait for that window to finish.'; exit 0 }
+    if (-not $locked) {
+        if ($NoBrowser) { throw 'Another launch is still starting/preparing/stopping. Wait for it to finish and reopen ExamLens Desktop.' }
+        Write-Host 'ExamLens is already starting, preparing or stopping. Wait for that window to finish.'; exit 0
+    }
     $state = Read-Json $statePath
     if ($Mode -eq 'Stop') { Stop-Demo $state; exit 0 }
     if ($Mode -eq 'Prepare') {
@@ -191,20 +205,35 @@ try {
             & $npm run build
             if ($LASTEXITCODE -ne 0) { throw 'Dashboard production build failed.' }
         } finally { Pop-Location }
+        if ($Desktop) {
+            Write-Host 'Preparing the Electron desktop runtime...'
+            Push-Location -LiteralPath (Join-Path $root 'desktop')
+            try {
+                & $npm ci '--include=dev'
+                if ($LASTEXITCODE -ne 0) { throw 'Electron preparation failed. Retry Prepare Desktop App.cmd while online.' }
+                if (-not (Test-Path -LiteralPath 'node_modules/electron/dist/electron.exe')) { throw 'Electron executable is missing. Do not skip npm install scripts during desktop preparation.' }
+            } finally { Pop-Location }
+        }
         Write-Json @{ fingerprint = Get-SourceFingerprint; build = (Get-Content -Raw -LiteralPath (Join-Path $dashboard '.next/BUILD_ID')).Trim(); prepared = (Get-Date).ToString('o') } $preparedPath
         try {
-            $desktop = [Environment]::GetFolderPath('Desktop')
-            $shortcutPath = Join-Path $desktop 'ExamLens.lnk'
-            if ((Test-Path -LiteralPath $desktop) -and -not (Test-Path -LiteralPath $shortcutPath)) {
+            $desktopFolder = [Environment]::GetFolderPath('Desktop')
+            $shortcutName = if ($Desktop) { 'ExamLens Desktop.lnk' } else { 'ExamLens.lnk' }
+            $shortcutPath = Join-Path $desktopFolder $shortcutName
+            if ((Test-Path -LiteralPath $desktopFolder) -and -not (Test-Path -LiteralPath $shortcutPath)) {
                 $shell = New-Object -ComObject WScript.Shell
                 $shortcut = $shell.CreateShortcut($shortcutPath)
-                $shortcut.TargetPath = Join-Path $root 'Start Demo.cmd'
+                if ($Desktop) {
+                    $shortcut.TargetPath = Join-Path $root 'desktop/node_modules/electron/dist/electron.exe'
+                    $shortcut.Arguments = '"' + (Join-Path $root 'desktop') + '"'
+                    $shortcut.IconLocation = Join-Path $root 'desktop/icon.ico'
+                } else { $shortcut.TargetPath = Join-Path $root 'Start Demo.cmd' }
                 $shortcut.WorkingDirectory = $root
                 $shortcut.Description = 'Start the local ExamLens presentation dashboard'
                 $shortcut.Save()
             }
         } catch { Write-Host 'Desktop shortcut could not be created; Start Demo.cmd in this folder still works.' }
-        Write-Host 'Ready. Double-click Start Demo.cmd. Preparation is not needed again unless the app changes.' -ForegroundColor Green
+        if ($Desktop) { Write-Host 'Ready. Double-click ExamLens Desktop on your desktop, or Start Desktop App.cmd in this folder.' -ForegroundColor Green }
+        else { Write-Host 'Ready. Double-click Start Demo.cmd. Preparation is not needed again unless the app changes.' -ForegroundColor Green }
         exit 0
     }
 
@@ -218,7 +247,8 @@ try {
     if ($state) {
         if ((Test-Identity $state.api) -and (Test-Identity $state.dashboard) -and (Test-OwnedListener $state.api 8000) -and (Test-OwnedListener $state.dashboard 3000) -and (Test-Api) -and (Test-Dashboard)) {
             Write-Host 'ExamLens is already running. Opening its dashboard.'
-            Start-Process 'http://127.0.0.1:3000'
+            if ($NoBrowser -and $Owner -and $state.owner -match '^[a-f0-9-]{36}$') { $state.owner = $Owner; Write-Json $state $statePath }
+            if (-not $NoBrowser) { Start-Process 'http://127.0.0.1:3000' }
             exit 0
         }
         if ((Test-Identity $state.api) -or (Test-Identity $state.dashboard)) { throw 'A previous launch is incomplete. Double-click Stop Demo.cmd, then Start Demo.cmd.' }
@@ -234,7 +264,7 @@ try {
     Write-Host 'Starting ExamLens backend...'
     $api = Start-Server $uv $apiArgs $backend 'backend' $run
     $created += $api
-    $state = [pscustomobject]@{ api = $api; dashboard = $null; run = $run }
+    $state = [pscustomobject]@{ api = $api; dashboard = $null; run = $run; owner = $(if ($Owner) { $Owner } else { 'launcher' }) }
     Write-Json $state $statePath
     Wait-Ready $api 'Backend'
     Write-Host 'Starting the production dashboard...'
@@ -258,7 +288,7 @@ try {
     Write-Json $state $statePath
     Wait-Ready $web 'Dashboard'
     Write-Host 'ExamLens is ready. Use Stop Demo.cmd to shut down when finished.' -ForegroundColor Green
-    Start-Process 'http://127.0.0.1:3000'
+    if (-not $NoBrowser) { Start-Process 'http://127.0.0.1:3000' }
 } catch {
     if ($created.Count -gt 0) {
         foreach ($entry in $created) { Stop-OwnedTree $entry }
