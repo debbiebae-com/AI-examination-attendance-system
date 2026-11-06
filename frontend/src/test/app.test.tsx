@@ -5,10 +5,30 @@ import App from "@/App"
 import { FaceCapture } from "@/components/face-capture"
 import { emptyPhotos, type Photos } from "@/lib/enrollment"
 
-// Speed up the guided sequence in UI tests; the real timings stay 3s countdown / 800ms frames.
+const poseMock = vi.hoisted(() => ({ count:0, faceCount:1, frontOnly:false, wrongTurn:false, failInit:false, closes:0 }))
+vi.mock("@/lib/pose-detector", () => ({
+  PoseDetector: class {
+    async init() { if(poseMock.failInit) throw new Error("Pose model unavailable") }
+    async sample() {
+      const stage = Math.floor(poseMock.count++ / 5)
+      const yaw = poseMock.frontOnly ? 0 : stage === 0 ? 0 : stage === 1 ? (poseMock.wrongTurn ? -25 : 25) : -25
+      return {observation:{faces:poseMock.faceCount,yaw,pitch:0,roll:0,width:0.4,height:0.5,cx:0.5,cy:0.5},photo:()=>"data:image/jpeg;base64,test"}
+    }
+    close() {poseMock.closes++}
+  },
+}))
+vi.mock("@/lib/pose", async (importOriginal) => ({
+  ...await importOriginal<typeof import("@/lib/pose")>(), HOLD_MS:0, SAMPLE_INTERVAL_MS:1,
+  PoseGate: class {
+    count=0
+    observe(valid:boolean) {this.count=valid?this.count+1:0;return {ready:this.count>=3,held:0}}
+  },
+}))
+
+// Accelerate the UI harness; pose timing/stability has its own unmocked unit tests.
 vi.mock("@/lib/enrollment", async (importOriginal) => {
   const actual = await importOriginal<typeof import("@/lib/enrollment")>()
-  return { ...actual, COUNTDOWN_SECONDS: 0, CAPTURE_INTERVAL_MS: 1, POSE_PAUSE_MS: 1 }
+  return { ...actual, CAPTURE_INTERVAL_MS: 0, POSE_PAUSE_MS: 1 }
 })
 
 function mockCamera() {
@@ -47,6 +67,7 @@ async function completeDetails(user: ReturnType<typeof userEvent.setup>) {
 
 describe("enrollment app", () => {
   beforeEach(() => {
+    Object.assign(poseMock,{count:0,faceCount:1,frontOnly:false,wrongTurn:false,failInit:false,closes:0})
     vi.stubGlobal("fetch", vi.fn())
   })
 
@@ -125,6 +146,7 @@ describe("enrollment app", () => {
     await waitFor(() => expect(screen.getByRole("button", { name: /start guided capture/i })).toBeEnabled())
     unmount()
     expect(stop).toHaveBeenCalled()
+    expect(poseMock.closes).toBeGreaterThan(0)
   })
 
   it("keeps loading inline and disables navigation while submitting", async () => {
@@ -137,4 +159,51 @@ describe("enrollment app", () => {
     expect(container.querySelector('[data-slot="spinner"]')).toBeInTheDocument()
     expect(container.querySelector(".overlay")).not.toBeInTheDocument()
   })
+})
+
+
+describe("pose-gated capture", () => {
+  beforeEach(() => Object.assign(poseMock,{count:0,faceCount:1,frontOnly:false,wrongTurn:false,failInit:false,closes:0}))
+  it("never advances the left pose if the person stays facing forward", async () => {
+    mockCamera(); poseMock.frontOnly=true
+    const user=userEvent.setup()
+    render(<FaceCapture photos={emptyPhotos()} onChange={vi.fn()} onBack={vi.fn()} onSubmit={vi.fn()} submitting={false} submitError={null}/> )
+    const start=screen.getByRole("button",{name:/start guided capture/i})
+    await waitFor(()=>expect(start).toBeEnabled());await user.click(start)
+    await waitFor(()=>expect(screen.getByText(/turn a little more to your LEFT/i)).toBeInTheDocument())
+    expect(screen.getByLabelText("Left: 0 of 3 frames")).toBeInTheDocument()
+    expect(screen.queryByRole("button",{name:/submit enrollment/i})).not.toBeInTheDocument()
+  })
+  it("reports a wrong-way turn without collecting left frames",async()=>{
+    mockCamera();poseMock.wrongTurn=true
+    const user=userEvent.setup()
+    render(<FaceCapture photos={emptyPhotos()} onChange={vi.fn()} onBack={vi.fn()} onSubmit={vi.fn()} submitting={false} submitError={null}/> )
+    const start=screen.getByRole("button",{name:/start guided capture/i})
+    await waitFor(()=>expect(start).toBeEnabled());await user.click(start)
+    expect(await screen.findByText(/That's your RIGHT/)).toBeInTheDocument()
+    expect(screen.getByLabelText("Left: 0 of 3 frames")).toBeInTheDocument()
+  })
+  it("fails closed if the pose model cannot load, then permits explicit retry",async()=>{
+    mockCamera();poseMock.failInit=true
+    const user=userEvent.setup()
+    render(<FaceCapture photos={emptyPhotos()} onChange={vi.fn()} onBack={vi.fn()} onSubmit={vi.fn()} submitting={false} submitError={null}/> )
+    expect(await screen.findByText("Pose model unavailable")).toBeInTheDocument()
+    expect(screen.getByRole("button",{name:/start guided capture/i})).toBeDisabled()
+    poseMock.failInit=false
+    await user.click(screen.getByRole("button",{name:/retry pose checker/i}))
+    await waitFor(()=>expect(screen.getByRole("button",{name:/start guided capture/i})).toBeEnabled())
+  })
+})
+
+it.each([0,2])("does not collect frames when the detector sees %s faces",async(faces)=>{
+  Object.assign(poseMock,{count:0,faceCount:faces,frontOnly:false,wrongTurn:false,failInit:false,closes:0})
+  mockCamera()
+  const user=userEvent.setup()
+  const changed=vi.fn()
+  render(<FaceCapture photos={emptyPhotos()} onChange={changed} onBack={vi.fn()} onSubmit={vi.fn()} submitting={false} submitError={null}/> )
+  const start=screen.getByRole("button",{name:/start guided capture/i})
+  await waitFor(()=>expect(start).toBeEnabled());await user.click(start)
+  await screen.findByText(faces===0 ? /No face found/ : /Only one person should/)
+  expect(screen.getByLabelText("Front: 0 of 3 frames")).toBeInTheDocument()
+  expect(changed).toHaveBeenCalledTimes(1) // initial clear only
 })

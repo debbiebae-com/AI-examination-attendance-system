@@ -1,9 +1,8 @@
 import { isSecretBrowserKey, usesInbox, type EnrollmentConfig } from "@/lib/config"
 
-// Guided capture mirrors the desktop flow: one prompt per pose, several frames collected
-// automatically while the person follows the instruction. The PC sync does the face check.
+// Browser head-pose verification gates each captured frame. PC sync still computes
+// InsightFace identity embeddings; browser landmarks are not identity embeddings.
 export const FRAMES_PER_POSE = 3
-export const COUNTDOWN_SECONDS = 3
 export const CAPTURE_INTERVAL_MS = 800
 export const POSE_PAUSE_MS = 1200
 

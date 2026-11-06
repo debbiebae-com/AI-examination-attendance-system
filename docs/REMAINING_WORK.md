@@ -132,3 +132,11 @@ registration and preview-confirmed selected/keep-only cleanup. This is not the f
 platform excluded from the agreed scope. Windows startup convenience files and a private
 backend env template are included. See dashboard/README.md for authentication boundaries,
 cloud deletion exclusions, process lifecycle limits and one-time setup.
+
+## Phone enrollment pose verification
+
+Added same-origin MediaPipe worker/model assets and pose-gated capture. Holding still facing
+forward cannot satisfy left/right steps; invalid/extra faces block saving and model failure
+has no timed fallback. Payload/sync are unchanged. This remains browser guidance, not robust
+liveness or trusted server-side pose validation. See frontend/README.md for thresholds,
+compatibility, tests, asset provenance and actual-phone test requirements.

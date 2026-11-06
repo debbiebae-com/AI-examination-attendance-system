@@ -36,3 +36,6 @@ backend/data/control.key
 backend/data/camera.stop
 
 !backend/.env.example
+
+# Generated MediaPipe runtime files (copied from locked npm package at build)
+frontend/public/pose/wasm/
