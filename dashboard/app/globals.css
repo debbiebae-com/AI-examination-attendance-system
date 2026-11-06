@@ -5,25 +5,25 @@
 @custom-variant dark (&:is(.dark *));
 
 :root {
-  --radius: 0.625rem;
-  --background: #f6f7f9;
-  --foreground: #192c45;
-  --card: #ffffff;
-  --card-foreground: #192c45;
-  --popover: #ffffff;
-  --popover-foreground: #192c45;
-  --primary: #315fbd;
-  --primary-foreground: #ffffff;
-  --secondary: #eaf0fc;
-  --secondary-foreground: #284e96;
-  --muted: #eef2f7;
-  --muted-foreground: #617189;
-  --accent: #eaf0fc;
-  --accent-foreground: #284e96;
-  --destructive: #bd3745;
-  --border: #dfe5ed;
-  --input: #d5deea;
-  --ring: #668edb;
+  --radius: 0.5rem;
+  --background: oklch(1 0 0);
+  --foreground: oklch(0.145 0 0);
+  --card: oklch(1 0 0);
+  --card-foreground: oklch(0.145 0 0);
+  --popover: oklch(1 0 0);
+  --popover-foreground: oklch(0.145 0 0);
+  --primary: oklch(0.205 0 0);
+  --primary-foreground: oklch(0.985 0 0);
+  --secondary: oklch(0.97 0 0);
+  --secondary-foreground: oklch(0.205 0 0);
+  --muted: oklch(0.97 0 0);
+  --muted-foreground: oklch(0.556 0 0);
+  --accent: oklch(0.97 0 0);
+  --accent-foreground: oklch(0.205 0 0);
+  --destructive: oklch(0.577 0.245 27.325);
+  --border: oklch(0.922 0 0);
+  --input: oklch(0.922 0 0);
+  --ring: oklch(0.708 0 0);
 }
 
 @theme inline {
@@ -53,29 +53,15 @@
 }
 
 @layer base {
-  * {
-    @apply border-border outline-ring/50;
-  }
-  body {
-    @apply m-0 bg-background font-sans text-foreground antialiased;
-  }
-  button:not(:disabled),
-  [role="checkbox"]:not(:disabled) {
-    cursor: pointer;
-  }
-  ::selection {
-    background: #dce8ff;
-    color: #172d52;
-  }
-  [hidden] {
-    display: none !important;
-  }
+  * { @apply border-border outline-ring/50; }
+  body { @apply m-0 bg-background font-sans text-foreground antialiased; }
+  button:not(:disabled), [role="checkbox"]:not(:disabled) { cursor: pointer; }
+  ::selection { @apply bg-neutral-200 text-neutral-950; }
+  [hidden] { display: none !important; }
 }
 
 @media (prefers-reduced-motion: reduce) {
-  *,
-  *::before,
-  *::after {
+  *, *::before, *::after {
     animation-duration: 0.01ms !important;
     animation-iteration-count: 1 !important;
     transition-duration: 0.01ms !important;
@@ -83,120 +69,6 @@
   }
 }
 
-html {
-  scroll-behavior: smooth;
-  scroll-padding-top: 80px;
-}
-button,
-a,
-input {
-  -webkit-tap-highlight-color: transparent;
-}
-a:focus-visible {
-  outline: 2px solid var(--ring);
-  outline-offset: 3px;
-}
-
-/* Midnight / blue / sea-glass. Semantic shadcn tokens also theme every control panel. */
-.workspace-sidebar {
-  --background: #1c2f49;
-  --foreground: #f2f6ff;
-  --muted-foreground: #b0bfd3;
-  --border: #30435e;
-  --accent: #243d60;
-  --accent-foreground: #ffffff;
-  background: #14253d;
-  color: var(--foreground);
-  border-color: #263b57;
-}
-.workspace-sidebar a:focus-visible {
-  outline-color: #aac8ff;
-}
-.workspace-nav-link {
-  color: #b0bfd3;
-  transition:
-    background 0.15s,
-    color 0.15s;
-}
-.workspace-nav-link:hover {
-  background: #203651;
-  color: #ffffff;
-}
-.workspace-nav-link[aria-current="location"] {
-  background: #254675;
-  box-shadow: inset 0 0 0 1px #3d6090;
-  color: #ffffff;
-  font-weight: 500;
-}
-.workspace-header {
-  background: #ffffff;
-}
-.exam-card {
-  box-shadow: 0 2px 8px #192c4504;
-}
-.exam-heading {
-  background: #eef3fd;
-  border-color: #dce5f6;
-}
-.metric-card {
-  position: relative;
-  overflow: hidden;
-  border-top: 3px solid var(--metric-color);
-}
-.metric-card .metric-value {
-  color: var(--metric-color);
-}
-.metric-card[data-tone="teal"] {
-  --metric-color: #78cdbc;
-  --muted-foreground: #daf3ed;
-  --card: #17675e;
-  --card-foreground: #ffffff;
-  border-color: #17675e;
-  box-shadow: 0 4px 12px #17675e12;
-}
-.metric-card[data-tone="teal"] .metric-value {
-  color: #ffffff;
-}
-.metric-card[data-tone="blue"] {
-  --metric-color: #315fbd;
-}
-.metric-card[data-tone="amber"] {
-  --metric-color: #9b681c;
-}
-.metric-card[data-tone="slate"] {
-  --metric-color: #536b91;
-}
-.student-record-card {
-  border-color: #cbdaf4;
-}
-.student-record-heading {
-  background: #f0f5ff;
-  border-color: #dce5f6;
-}
-.student-avatar {
-  border-color: transparent;
-}
-.avatar-blue {
-  color: #315a9c;
-  background: #e9f0fe;
-}
-.avatar-teal {
-  color: #24685e;
-  background: #e5f2ed;
-}
-.avatar-ochre {
-  color: #805923;
-  background: #f8efdf;
-}
-.record-table thead {
-  background: #f3f6fb;
-}
-.record-table tbody tr:hover {
-  background: #f5f8fe;
-}
-.record-tabs {
-  background: #edf2fb;
-}
-.record-tabs [data-state="active"] {
-  color: #284e96;
-}
+html { scroll-behavior: smooth; scroll-padding-top: 80px; }
+button, a, input { -webkit-tap-highlight-color: transparent; }
+a:focus-visible { outline: 2px solid var(--ring); outline-offset: 3px; }

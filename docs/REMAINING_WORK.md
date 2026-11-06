@@ -158,11 +158,3 @@ live polling, explicit illustration mode and offline safeguards. The dashboard a
 the two agreed index display rules even against old/stale API responses; CSC/24 always
 displays level 300 without changing the stored level. All other year codes keep supplied
 levels. Phone enrollment and backend recognition behavior are unchanged by this redesign.
-
-### Colour palette iteration
-
-Kept the approved shadcn workspace structure and functionality, replacing stock Neutral
-with a custom Midnight / blue / sea-glass palette: navy sidebar, blue actions and tinted
-exam heading, teal saved-attendance card, white records, subtle coloured initials and
-amber attention states. CSS tokens also theme controls/detail panels. No data, recognition,
-index-level mappings or operational safeguards changed.

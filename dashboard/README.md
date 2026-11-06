@@ -175,17 +175,14 @@ academic identity details. The top banner shows the exam/venue, with processed F
 Cards wrap long lines to fit the frame. Crowded/occluded face cards can still overlap; real
 multi-person camera testing is necessary before the presentation.
 
-## shadcn workspace and Midnight colour palette
+## shadcn Neutral redesign
 
-The dashboard keeps the configured shadcn **New York** components, with a custom
-**Midnight / blue / sea-glass** colour palette through CSS variables. Navy navigation,
-blue actions, white surfaces, a teal attendance card and restrained amber/slate metric
-accents replace the earlier stock Neutral look. This is a custom palette, not a named
-upstream shadcn preset. Geist is bundled locally. Shared shadcn-style Card,
+The dashboard uses the configured shadcn **New York / Neutral** theme and CSS variables,
+without a green primary override. Geist is bundled locally. Shared shadcn-style Card,
 Button, Input, Badge, Table and Radix Tabs primitives provide the workspace layout:
 compact sidebar, examination summary, measured counts, searchable student records,
-latest-student panel, activity log and neutral detail/control panels. Green/teal indicates saved/active states; amber/red indicate attention/errors.
-Initials use a stable name-derived decorative tint, not an attendance or identity score. No fabricated trends,
+latest-student panel, activity log and neutral detail/control panels. Green is reserved
+for successful/active statuses; amber/red indicate attention/errors. No fabricated trends,
 percentages or decorative charts are added. The mobile sidebar is toggleable; record
 tables scroll horizontally without widening the page. Filters support keyboard navigation.
 Camera/sync/registration/removal controls keep their existing behavior and safeguards.
