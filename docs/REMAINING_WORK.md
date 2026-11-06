@@ -188,8 +188,16 @@ claims or subscription tiers. Await user visual review before further feature ad
 
 Added PC/DroidCam camera chooser, Windows capture-backend choices, a no-attendance bounded
 camera check with brief local snapshot window and troubleshooting instructions. Shared capture
-helper is used by checking and recognition; phone mode requests 720p, preserving model,
+helper is used by checking and recognition; phone mode retains the driver format, preserving model,
 ByteTrack and 480/four-thread inference settings. Source metadata is exposed in the live session.
 No auto device-name discovery, phone IP endpoint, browser webcam takeover or automatic fallback
 to another device. **Physical DroidCam installation/connection/index/latency still need testing
 on the user's Windows PC.** A readable frame is not proof that the source is the intended phone.
+
+### DroidCam green-frame follow-up
+
+User reports a green recognition window with FPS while the DroidCam PC-client preview
+works. Removed OpenCV's forced 1280x720/30 FPS mode changes for phone capture, a possible
+virtual-driver format incompatibility. This is a compatibility precaution, not a confirmed
+root-cause diagnosis. User must verify Check camera on Windows, compare capture backends
+and indices, then retry recognition. No automatic device/backend fallback is introduced.

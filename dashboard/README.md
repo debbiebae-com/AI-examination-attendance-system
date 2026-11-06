@@ -281,10 +281,23 @@ accepted by these endpoints and the dashboard does not install/manage DroidCam i
    sources. Last selected camera is shown in task details; running source/index/backend are
    also attached to the live session. The source name is a user selection, not driver identification.
 
-Phone profile requests 1280x720 / 30 FPS if the driver supports it; the check reports actual
-frame dimensions. Drivers can ignore requests. Existing PC/default auto capture is unchanged.
+Phone profile retains the format configured by the DroidCam client; it does not force
+resolution or frame rate. Some virtual camera drivers return green/corrupt frames when
+OpenCV renegotiates these properties. Configure resolution in DroidCam instead; the check
+reports actual frame dimensions. Existing PC/default auto capture is unchanged.
 Managed recognition retains the existing model choice, ByteTrack, detector size 480 and four
 threads. Test this exact phone/cable/backend before presentation day. Actual DroidCam hardware
 has not been validated in this sandbox; tests mock camera/device APIs and subprocess launching.
 The camera-check child is the only process opened for testing and blocks other demo jobs until
 it exits. Gallery/sync/delete operations retain the existing mutual-exclusion guards.
+
+### Green image with FPS overlay
+
+FPS only confirms the recognition loop is processing frames; it does not prove correct
+camera content. Stop recognition, confirm the live phone feed in the DroidCam Windows
+client, and keep the client connected. In Demo controls, use Check camera with the same
+index/backend before starting recognition. Test Automatic, DirectShow and Media Foundation
+one at a time; camera numbers can differ by backend. A readable green frame can still pass
+the frame-read check, so visual confirmation is essential. Try other indices if necessary.
+Current phone capture leaves resolution/FPS negotiation to DroidCam rather than forcing
+720p/30. Physical Windows/DroidCam verification remains required.
