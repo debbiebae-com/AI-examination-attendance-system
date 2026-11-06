@@ -10,6 +10,7 @@ import sys
 import threading
 import time
 from collections import deque
+from typing import Literal
 
 from fastapi import APIRouter, Depends, Header, HTTPException
 from pydantic import BaseModel, Field
@@ -54,13 +55,14 @@ class Jobs:
         self.kind = None
         self.lines = deque(maxlen=60)
         self.code = None
+        self.camera_info = None
         self.stop_path = DATA_DIR / "camera.stop"
 
     def status(self):
         running = self.process is not None and self.process.poll() is None
         return {"running": running, "kind": self.kind,
                 "exit_code": None if running else (self.process.poll() if self.process else self.code), "log": list(self.lines),
-                "sync_configured": bool(SUPABASE_URL and SUPABASE_SERVICE_KEY)}
+                "sync_configured": bool(SUPABASE_URL and SUPABASE_SERVICE_KEY), "platform": sys.platform, "camera_info": self.camera_info}
 
     def idle(self):
         if self.process is not None and self.process.poll() is None:
@@ -82,6 +84,16 @@ class Jobs:
             raise HTTPException(503, "Unable to launch the local demo process") from exc
         self.kind = kind
         self._launch_reader(self.process)
+
+    def _launch_timeout(self, process):
+        def expire():
+            with self.lock:
+                if process.poll() is None:
+                    self.lines.append("CAMERA CHECK TIMED OUT: device/driver did not respond; close the DroidCam client and reconnect it before retrying.")
+                    process.kill()
+        timer = threading.Timer(20, expire)
+        timer.daemon = True
+        timer.start()
 
     def _launch_reader(self, process):
         threading.Thread(target=self._collect, args=(process,), daemon=True).start()
@@ -105,8 +117,23 @@ class ExamSelection(BaseModel):
     exam_id: int
 
 
-class CameraSelection(ExamSelection):
+class CameraDevice(BaseModel):
     camera: int = Field(default=0, ge=0, le=10)
+    source: Literal["pc", "droidcam"] = "pc"
+    capture_backend: Literal["auto", "dshow", "msmf"] = "auto"
+
+
+class CameraSelection(CameraDevice):
+    exam_id: int
+
+
+def camera_args(body: CameraDevice):
+    if body.capture_backend != "auto" and sys.platform != "win32":
+        raise HTTPException(422, "This capture backend is Windows-only; choose Automatic")
+    args = ["--camera", str(body.camera)]
+    if body.source != "pc" or body.capture_backend != "auto":
+        args += ["--camera-source", body.source, "--capture-backend", body.capture_backend]
+    return args
 
 
 class PeopleSelection(BaseModel):
@@ -172,8 +199,19 @@ def readiness(exam_id: int, session: Session = Depends(get_session)):
 def start_camera(body: CameraSelection, session: Session = Depends(get_session)):
     with jobs.lock:
         exam = get_exam(session, body.exam_id)
-        jobs.start("camera", ["app.vision.attend", "--exam", exam.course_code, "--camera", str(body.camera),
+        jobs.start("camera", ["app.vision.attend", "--exam", exam.course_code, *camera_args(body),
                               "--det-size", "480", "--threads", "4", "--model", ENROLL_MODEL, "--stop-file", str(jobs.stop_path)])
+        jobs.camera_info = body.model_dump(exclude={"exam_id"})
+        return jobs.status()
+
+
+@router.post("/camera/check", dependencies=[Depends(authorize)])
+def check_camera(body: CameraDevice):
+    with jobs.lock:
+        args = camera_args(body)
+        jobs.start("camera_check", ["app.vision.camera_check", *args])
+        jobs.camera_info = body.model_dump()
+        jobs._launch_timeout(jobs.process)
         return jobs.status()
 
 

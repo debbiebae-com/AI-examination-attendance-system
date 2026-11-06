@@ -258,3 +258,33 @@ selected-only attendance CSV export. Selected exports include saved attendance o
 Browser checks cover this filtered CSV and shortcut focus in addition to existing controls.
 Fontshare cannot be reached in the sandbox browser, so its screenshots use the bundled
 fallback; General Sans loading must be checked on an internet-connected presentation PC.
+
+## Phone recognition camera — DroidCam virtual webcam
+
+Install and connect the compatible DroidCam phone app **and Windows client/virtual webcam
+driver**. An OBS-only source is not enough for OpenCV's webcam selection. The phone feeds
+the Windows webcam device; recognition remains on the PC. No phone IP/network URL is
+accepted by these endpoints and the dashboard does not install/manage DroidCam itself.
+
+1. Stop existing recognition. Connect the phone in the DroidCam Windows client (USB preferred;
+   Wi-Fi works if the client can connect). Confirm video there and keep that connection running.
+2. Close competing apps using the virtual webcam (Windows Camera, Teams, Zoom, etc.).
+3. Open **Demo controls → Recognition camera → Phone / DroidCam**.
+4. Choose a camera number. `1` is a starting guess, **not automatic device discovery**.
+   Windows backend choice defaults to DirectShow for this profile; try Automatic or Media
+   Foundation if necessary. Device indices can differ by backend and after reconnecting.
+5. **Check camera** reads a frame and displays a four-second snapshot in a local PC window.
+   Check that the image actually comes from the phone. No identity inference, enrollment or
+   attendance writes occur. A slow driver check is terminated after 20 seconds. A successful
+   frame check does not prove correct identity, smooth live performance or long-term stability.
+6. After the check finishes, select the exam and **Start recognition**. Stop before switching
+   sources. Last selected camera is shown in task details; running source/index/backend are
+   also attached to the live session. The source name is a user selection, not driver identification.
+
+Phone profile requests 1280x720 / 30 FPS if the driver supports it; the check reports actual
+frame dimensions. Drivers can ignore requests. Existing PC/default auto capture is unchanged.
+Managed recognition retains the existing model choice, ByteTrack, detector size 480 and four
+threads. Test this exact phone/cable/backend before presentation day. Actual DroidCam hardware
+has not been validated in this sandbox; tests mock camera/device APIs and subprocess launching.
+The camera-check child is the only process opened for testing and blocks other demo jobs until
+it exits. Gallery/sync/delete operations retain the existing mutual-exclusion guards.

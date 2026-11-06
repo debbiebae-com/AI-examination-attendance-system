@@ -623,10 +623,12 @@ export function Dashboard() {
                       : "Not started",
                   ],
                   [
-                    "Data source",
-                    illustration
-                      ? "Illustrative fixture"
-                      : "Local attendance database",
+                    "Camera source",
+                    live?.camera_source
+                      ? `${live.camera_source === "droidcam" ? "Phone / DroidCam" : "PC webcam"} · #${live.camera_index ?? 0} · ${live.camera_backend || "auto"}`
+                      : illustration
+                        ? "Illustrative fixture"
+                        : "Local attendance database",
                   ],
                 ].map(([label, value]) => (
                   <div key={label}>

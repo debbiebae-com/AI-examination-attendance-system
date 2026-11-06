@@ -183,3 +183,13 @@ bars, Ctrl/Cmd+K shared search, activity shortcut and fullscreen control. Retain
 record semantics and all demo safeguards. General Sans uses Fontshare API, with bundled
 Geist offline fallback; font binary not redistributed. No fake sales, percentages, AI
 claims or subscription tiers. Await user visual review before further feature additions.
+
+## DroidCam virtual webcam readiness
+
+Added PC/DroidCam camera chooser, Windows capture-backend choices, a no-attendance bounded
+camera check with brief local snapshot window and troubleshooting instructions. Shared capture
+helper is used by checking and recognition; phone mode requests 720p, preserving model,
+ByteTrack and 480/four-thread inference settings. Source metadata is exposed in the live session.
+No auto device-name discovery, phone IP endpoint, browser webcam takeover or automatic fallback
+to another device. **Physical DroidCam installation/connection/index/latency still need testing
+on the user's Windows PC.** A readable frame is not proof that the source is the intended phone.

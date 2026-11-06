@@ -42,6 +42,9 @@ export type LiveEvent = {
   similarity?: number;
 };
 export type Session = {
+  camera_source?: "pc" | "droidcam";
+  camera_index?: number;
+  camera_backend?: string;
   session_id: string | null;
   status: string;
   exam?: Exam | null;

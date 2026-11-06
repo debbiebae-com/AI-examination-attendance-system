@@ -121,3 +121,65 @@ def test_unconfigured_sync_and_external_camera_stop_fail_safely(api,monkeypatch)
 def test_empty_control_key_fails_closed(api):
     control.KEY_FILE.write_text("")
     assert api.get("/control/status", headers={"X-Local-Control":""}).status_code == 503
+
+
+def test_phone_camera_check_is_authorized_bounded_and_does_not_need_exam(api, monkeypatch):
+    calls=[];timeouts=[]
+    class Process:
+        stdout=[]
+        def poll(self): return None
+    monkeypatch.setattr(control,"sys",SimpleNamespace(platform="win32",executable="python"))
+    monkeypatch.setattr(control.subprocess,"Popen",lambda args,**kwargs:(calls.append((args,kwargs)) or Process()))
+    monkeypatch.setattr(control.Jobs,"_launch_reader",lambda self,process:None)
+    monkeypatch.setattr(control.Jobs,"_launch_timeout",lambda self,process:timeouts.append(process))
+    payload={"camera":2,"source":"droidcam","capture_backend":"dshow"}
+    assert api.post("/control/camera/check",json=payload,headers={"X-Local-Control":"bad"}).status_code==403
+    result=api.post("/control/camera/check",json=payload)
+    assert result.status_code==200
+    assert result.json()["kind"]=="camera_check"
+    assert result.json()["camera_info"]==payload
+    assert calls[0][0][3:]==["app.vision.camera_check","--camera","2","--camera-source","droidcam","--capture-backend","dshow"]
+    assert calls[0][1]["shell"] is False and len(timeouts)==1
+    assert api.post("/control/camera/start",json={"exam_id":1}).status_code==409
+    assert api.post("/control/camera/check",json=payload).status_code==409
+
+
+def test_camera_device_validation_and_no_network_urls(api, monkeypatch):
+    monkeypatch.setattr(control,"sys",SimpleNamespace(platform="linux",executable="python"))
+    for payload in ({"camera":-1},{"camera":11},{"camera":"http://phone:4747/video"},{"camera":1,"source":"internet"},{"camera":1,"capture_backend":"shell"},{"camera":1,"capture_backend":"dshow"}):
+        assert api.post("/control/camera/check",json=payload).status_code==422
+
+
+def test_phone_recognition_preserves_identity_and_performance_settings(api, monkeypatch):
+    calls=[]
+    class Process:
+        stdout=[]
+        def poll(self): return None
+    monkeypatch.setattr(control,"sys",SimpleNamespace(platform="win32",executable="python"))
+    monkeypatch.setattr(control.subprocess,"Popen",lambda args,**kwargs:(calls.append(args) or Process()))
+    monkeypatch.setattr(control.Jobs,"_launch_reader",lambda self,process:None)
+    result=api.post("/control/camera/start",json={"exam_id":1,"camera":2,"source":"droidcam","capture_backend":"msmf"})
+    assert result.status_code==200
+    argv=calls[0]
+    for flag,value in (("--camera","2"),("--camera-source","droidcam"),("--capture-backend","msmf"),("--det-size","480"),("--threads","4"),("--model",control.ENROLL_MODEL)):
+        assert argv[argv.index(flag)+1]==value
+
+
+def test_camera_check_timeout_only_kills_the_checked_process(monkeypatch):
+    callbacks=[];killed=[]
+    timer=SimpleNamespace(daemon=False,start=lambda:None)
+    def create_timer(seconds,callback):
+        assert seconds==20
+        callbacks.append(callback)
+        return timer
+    monkeypatch.setattr(control.threading,"Timer",create_timer)
+    manager=control.Jobs()
+    process=SimpleNamespace(poll=lambda:None,kill=lambda:killed.append("checked"))
+    manager._launch_timeout(process)
+    assert timer.daemon
+    callbacks[0]()
+    assert killed==["checked"] and "TIMED OUT" in manager.lines[-1]
+    done=SimpleNamespace(poll=lambda:0,kill=lambda:killed.append("finished"))
+    manager._launch_timeout(done)
+    callbacks[1]()
+    assert killed==["checked"]

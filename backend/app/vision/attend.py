@@ -23,6 +23,7 @@ from sqlalchemy import select
 
 from app.attendance import NotEligible, mark_attendance
 from app.db import SessionLocal, engine
+from app.vision.camera_source import open_camera
 from app.presentation import academic_display, camera_detail_lines
 from app.live import LivePublisher
 from app.models import Base, Exam, Student
@@ -157,6 +158,8 @@ def main() -> None:
     parser.add_argument("--stop-file", type=Path, help="local dashboard cooperative stop signal")
     parser.add_argument("--exam", required=True, help="course code, e.g. CS101")
     parser.add_argument("--camera", type=int, default=0)
+    parser.add_argument("--capture-backend", choices=["auto", "dshow", "msmf"], default="auto")
+    parser.add_argument("--camera-source", choices=["pc", "droidcam"], default="pc")
     parser.add_argument("--threshold", type=float, default=DEFAULT_THRESHOLD)
     parser.add_argument("--margin", type=float, default=DEFAULT_MARGIN)
     parser.add_argument("--confirm", type=int, default=CONFIRM_FRAMES, help="frames a match must hold")
@@ -201,6 +204,7 @@ def main() -> None:
         raise SystemExit("No enrolled faces found. Run the capture or photo enrollment first.")
 
     with LivePublisher(exam_id) as live:
+        live.payload.update(camera_source=args.camera_source, camera_index=args.camera, camera_backend=args.capture_backend)
         print(f"Exam {args.exam}: {exam_title}. {len(matcher)} face samples loaded.")
         print("Loading InsightFace...")
         if args.liveness:
@@ -218,9 +222,10 @@ def main() -> None:
 
         tracker = FaceTracker(max_missed=args.track_buffer, activation_threshold=args.track_threshold)
         decider = AttendanceDecider(tracker, confirm_frames=args.confirm)
-        camera = cv2.VideoCapture(args.camera)
-        if not camera.isOpened():
-            raise SystemExit(f"Cannot open camera {args.camera}. Try --camera 1.")
+        try:
+            camera = open_camera(args.camera, args.capture_backend, args.camera_source == "droidcam")
+        except (RuntimeError, ValueError) as exc:
+            raise SystemExit(str(exc)) from exc
         try:
             camera.set(cv2.CAP_PROP_BUFFERSIZE, 1)
         except Exception:
