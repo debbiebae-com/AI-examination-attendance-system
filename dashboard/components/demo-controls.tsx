@@ -18,7 +18,6 @@ import {
   DialogDescription,
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
-import type { Exam } from "@/lib/data";
 
 type Job = {
   running: boolean;
@@ -41,17 +40,7 @@ type Person = {
   ready: boolean;
   reasons: string[];
 };
-type PresentationAction = "register_all" | "clear_attendance" | "reset_display";
-type PresentationPlan = {
-  token: string;
-  action: PresentationAction;
-  counts: Record<string, number>;
-};
-const presentationLabels = {
-  register_all: "Register all volunteers",
-  clear_attendance: "Clear classroom attendance",
-  reset_display: "Reset live display",
-};
+type ResetPlan = { token: string; counts: Record<string, number> };
 type Plan = {
   token: string;
   students: { student_no: string; full_name: string }[];
@@ -84,7 +73,6 @@ export function DemoControls({
   onChanged: () => void;
 }) {
   const [open, setOpen] = useState(false);
-  const [exam, setExam] = useState("");
   const [people, setPeople] = useState<Person[]>([]);
   const [selected, setSelected] = useState<string[]>([]);
   const [job, setJob] = useState<Job | null>(null);
@@ -93,12 +81,16 @@ export function DemoControls({
   const [notice, setNotice] = useState("");
   const [busy, setBusy] = useState(false);
   const [ready, setReady] = useState(false);
+  const [localNumber, setLocalNumber] = useState("");
+  const [localName, setLocalName] = useState("");
+  const [replaceExisting, setReplaceExisting] = useState(false);
   const [camera, setCamera] = useState("0");
   const [source, setSource] = useState<"pc" | "droidcam">("pc");
   const [captureBackend, setCaptureBackend] = useState("auto");
   const [query, setQuery] = useState("");
-  const [presentationPlan, setPresentationPlan] =
-    useState<PresentationPlan | null>(null);
+  const [presentationPlan, setPresentationPlan] = useState<ResetPlan | null>(
+    null,
+  );
   const [plan, setPlan] = useState<Plan | null>(null);
   const [confirmation, setConfirmation] = useState("");
   const [refresh, setRefresh] = useState(0);
@@ -113,25 +105,15 @@ export function DemoControls({
     setPresentationPlan(null);
     async function poll() {
       try {
-        const [status, list] = await Promise.all([
+        const [status, roster] = await Promise.all([
           api<Job>("control/status"),
-          api<Exam[]>("exams"),
+          api<Person[]>("control/readiness?demo=true"),
         ]);
-        const chosen =
-          exam ||
-          String(
-            (list.find((item) => item.course_code === "CS101") || list[0])
-              ?.id || "",
-          );
-        const roster = chosen
-          ? await api<Person[]>(`control/readiness?exam_id=${chosen}`)
-          : [];
         if (cancelled) return;
         setJob(status);
         setPeople(roster);
         setReady(true);
         setLoadError("");
-        if (!exam && chosen) setExam(chosen);
       } catch (e) {
         if (!cancelled) {
           setLoadError(e instanceof Error ? e.message : "Controls unavailable");
@@ -146,7 +128,7 @@ export function DemoControls({
       cancelled = true;
       clearTimeout(timer);
     };
-  }, [open, exam, disabled, refresh]);
+  }, [open, disabled, refresh]);
   async function run(path: string, body: unknown) {
     setBusy(true);
     setError("");
@@ -158,6 +140,11 @@ export function DemoControls({
       setPresentationPlan(null);
       setConfirmation("");
       setSelected([]);
+      if (path === "demo/enroll") {
+        setLocalNumber("");
+        setLocalName("");
+        setReplaceExisting(false);
+      }
       setRefresh((r) => r + 1);
       onChanged();
     } catch (e) {
@@ -166,21 +153,35 @@ export function DemoControls({
       setBusy(false);
     }
   }
-  async function previewPresentation(action: PresentationAction) {
+  async function previewReset() {
     setBusy(true);
     setError("");
     setNotice("");
     setPlan(null);
     setPresentationPlan(null);
     try {
+      let status = await api<Job>("control/status");
+      if (status.running && status.kind === "camera") {
+        setNotice("Stopping recognition safely before reviewing the reset…");
+        await api("control/camera/stop", {});
+        const deadline = Date.now() + 180000;
+        do {
+          if (Date.now() > deadline)
+            throw new Error(
+              "Recognition is still stopping. Wait for the camera window to close, then try Reset demonstration again.",
+            );
+          await new Promise((resolve) => setTimeout(resolve, 500));
+          status = await api<Job>("control/status");
+        } while (status.running && status.kind === "camera");
+      }
       setPresentationPlan(
-        await api<PresentationPlan>("control/presentation/preview", {
-          exam_id: Number(exam),
-          action,
-        }),
+        await api<ResetPlan>("control/demo/reset/preview", {}),
       );
+      setNotice("");
+      setJob(status);
     } catch (e) {
-      setError(e instanceof Error ? e.message : "Preview failed");
+      setError(e instanceof Error ? e.message : "Reset preview failed");
+      setNotice("");
     } finally {
       setBusy(false);
     }
@@ -248,7 +249,8 @@ export function DemoControls({
           <DialogDescription className="mt-2 max-w-xl text-xs leading-5 text-muted-foreground">
             Operate this PC’s demonstration. Changes affect your real local
             database, not layout preview data. Stop recognition before syncing,
-            registering or removing volunteers.
+            enrolling or removing volunteers. Reset demonstration stops
+            dashboard-started recognition for you.
           </DialogDescription>
           {(error || loadError) && (
             <div
@@ -267,26 +269,13 @@ export function DemoControls({
             </p>
           )}
           <section
-            aria-label="Demonstration classroom"
-            className="mt-6 rounded-lg border bg-muted/40 p-4"
-          >
-            <p className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground">
-              Classroom
-            </p>
-            <h3 className="mt-1 text-sm font-semibold">Test classroom 1</h3>
-            <p className="mt-2 text-xs leading-5 text-muted-foreground">
-              Each recognized student shows a stable, randomly assigned sample
-              examination on camera. These are fictional presentation labels—not
-              exam registration. Saved attendance and readiness still use the
-              classroom's existing backing exam.
-            </p>
-          </section>
-          <section
             aria-label="Camera source setup"
             className="mt-5 rounded-xl border p-4"
           >
             <div className="flex items-center justify-between gap-2">
-              <h3 className="text-sm font-semibold">Recognition camera</h3>
+              <h3 className="text-sm font-semibold">
+                Camera for recognition and enrollment
+              </h3>
               <span className="text-[10px] text-muted-foreground">
                 PC processes video · phone supplies camera
               </span>
@@ -442,12 +431,11 @@ export function DemoControls({
           <div className="mt-4 flex flex-wrap gap-2">
             <Button
               className="bg-primary text-primary-foreground hover:bg-primary/90"
-              disabled={locked || !exam || !cameraValid}
+              disabled={locked || !cameraValid}
               onClick={() =>
                 run("camera/start", {
-                  exam_id: Number(exam),
                   ...cameraBody,
-                  demo_classroom: true,
+                  demo_mode: true,
                 })
               }
             >
@@ -457,17 +445,22 @@ export function DemoControls({
             <Button
               variant="outline"
               disabled={
-                busy || !ready || !job?.running || job.kind !== "camera"
+                busy ||
+                !ready ||
+                !job?.running ||
+                !["camera", "local_enroll"].includes(job.kind || "")
               }
               onClick={() => run("camera/stop", {})}
             >
               <Square />
-              Stop camera
+              {job?.kind === "local_enroll"
+                ? "Cancel enrollment"
+                : "Stop camera"}
             </Button>
             <Button
               variant="outline"
-              disabled={locked || !exam || !job?.sync_configured}
-              onClick={() => run("sync", { exam_id: Number(exam) })}
+              disabled={locked || !job?.sync_configured}
+              onClick={() => run("demo/sync", {})}
             >
               <Download />
               Sync submissions
@@ -475,7 +468,7 @@ export function DemoControls({
           </div>
           <p className="mt-3 text-[11px] leading-5 text-muted-foreground">
             {job?.sync_configured
-              ? "Sync imports pending phone submissions and wipes cloud photos after successful sync. It uses each submission’s exam, falling back to this classroom’s backing exam."
+              ? "Sync imports pending phone submissions and wipes cloud photos after successful sync. No registration step is needed for recognition demonstrations."
               : "Sync needs SUPABASE_URL and SUPABASE_SERVICE_KEY configured on the backend PC once. Never enter the service key in the browser."}{" "}
             Recognition opens the PC camera window; results flow into the live
             dashboard.
@@ -507,57 +500,36 @@ export function DemoControls({
             className="mt-7 border-t pt-6"
           >
             <h3 className="text-sm font-semibold">Presentation Tools</h3>
-            <p className="mt-1 text-xs text-muted-foreground">
-              Prepare and manage your ExamLens demonstration. Stop recognition
-              before using these tools.
+            <p className="mt-1 text-xs leading-5 text-muted-foreground">
+              Show one face or several people, reset, then repeat. Enrolled
+              faces need no exam registration in this demonstration mode. Normal
+              exam eligibility rules are unchanged outside demonstration mode.
             </p>
-            <div className="mt-4 space-y-4">
-              {(
-                [
-                  [
-                    "register_all",
-                    "Registers all locally enrolled volunteers for Test classroom 1. Fee and suspension rules stay unchanged.",
-                  ],
-                  [
-                    "clear_attendance",
-                    "Start another round. Clears only classroom attendance; keeps students, face data and registrations.",
-                  ],
-                  [
-                    "reset_display",
-                    "Clears activity and live counters only. Saved attendance and attendance-based totals stay unchanged.",
-                  ],
-                ] as const
-              ).map(([action, description]) => (
-                <div
-                  key={action}
-                  className="flex flex-wrap items-center justify-between gap-3"
-                >
-                  <p className="max-w-sm text-xs leading-5 text-muted-foreground">
-                    {description}
-                  </p>
-                  <Button
-                    size="sm"
-                    variant="outline"
-                    disabled={locked || !exam}
-                    onClick={() => previewPresentation(action)}
-                  >
-                    {presentationLabels[action]}
-                  </Button>
-                </div>
-              ))}
-            </div>
+            <Button
+              className="mt-4"
+              size="sm"
+              variant="outline"
+              disabled={
+                busy || !ready || (!!job?.running && job.kind !== "camera")
+              }
+              onClick={previewReset}
+            >
+              Reset demonstration
+            </Button>
+            <p className="mt-2 text-xs text-muted-foreground">
+              Stops recognition before review. Clears demonstration attendance,
+              live activity and counters together, but keeps enrolled faces and
+              other exam records. Export this round first if needed.
+            </p>
             {presentationPlan && (
               <div
                 role="region"
-                aria-label="Confirm presentation action"
+                aria-label="Confirm demonstration reset"
                 className="mt-4 rounded-lg border p-4"
               >
                 <h4 className="text-sm font-semibold">
-                  Review: {presentationLabels[presentationPlan.action]}
+                  Review demonstration reset
                 </h4>
-                <p className="mt-2 text-xs">
-                  Test classroom 1 · Preview expires after two minutes.
-                </p>
                 <ul className="mt-2 text-xs">
                   {Object.entries(presentationPlan.counts).map(
                     ([key, count]) => (
@@ -568,30 +540,23 @@ export function DemoControls({
                   )}
                 </ul>
                 <p className="mt-2 text-xs text-muted-foreground">
-                  {presentationPlan.action === "clear_attendance"
-                    ? "Attendance deletion cannot be undone. Students, faces and registrations are preserved. Start recognition again for the next round."
-                    : presentationPlan.action === "reset_display"
-                      ? "Only the live feed and its counters are cleared. Saved attendance is not deleted."
-                      : "Existing registrations are kept; only missing registrations are added."}
+                  Attendance deletion cannot be undone. Student records and face
+                  samples stay. Preview expires after two minutes. After
+                  confirming, click Start recognition for the next round.
                 </p>
                 <div className="mt-3 flex gap-2">
                   <Button
                     size="sm"
-                    variant={
-                      presentationPlan.action === "clear_attendance"
-                        ? "destructive"
-                        : "outline"
-                    }
+                    variant="destructive"
                     disabled={locked}
                     onClick={() =>
-                      run("presentation/confirm", {
+                      run("demo/reset/confirm", {
                         token: presentationPlan.token,
-                        confirmation: "CONFIRM",
+                        confirmation: "RESET",
                       })
                     }
                   >
-                    Confirm{" "}
-                    {presentationLabels[presentationPlan.action].toLowerCase()}
+                    Confirm reset demonstration
                   </Button>
                   <Button
                     size="sm"
@@ -604,6 +569,81 @@ export function DemoControls({
                 </div>
               </div>
             )}
+          </section>
+          <section aria-label="Local enrollment" className="mt-7 border-t pt-6">
+            <h3 className="text-sm font-semibold">Enroll locally</h3>
+            <p className="mt-1 text-xs leading-5 text-muted-foreground">
+              No internet or sync required. Uses the camera selected above:{" "}
+              {source === "droidcam" ? "Phone / DroidCam" : "PC webcam"}, device
+              #{camera}, {captureBackend}. The guided capture window opens on
+              this PC. One volunteer at a time: look straight, then turn left
+              and right.
+            </p>
+            <div className="mt-4 grid gap-3 sm:grid-cols-2">
+              <label className="text-xs">
+                Volunteer index / ID (letters, digits, /, _ or -)
+                <Input
+                  aria-label="Local volunteer ID"
+                  maxLength={32}
+                  value={localNumber}
+                  disabled={locked}
+                  onChange={(e) => {
+                    setLocalNumber(e.target.value);
+                    setReplaceExisting(false);
+                  }}
+                />
+              </label>
+              <label className="text-xs">
+                Full name
+                <Input
+                  aria-label="Local volunteer full name"
+                  maxLength={120}
+                  value={localName}
+                  disabled={locked}
+                  onChange={(e) => setLocalName(e.target.value)}
+                />
+              </label>
+            </div>
+            <label className="mt-3 flex items-start gap-2 text-xs leading-5 text-muted-foreground">
+              <input
+                type="checkbox"
+                aria-label="Confirm local re-enrollment"
+                disabled={locked}
+                checked={replaceExisting}
+                onChange={(e) => setReplaceExisting(e.target.checked)}
+              />
+              If this ID already exists, replace its local capture samples.
+              Existing name and phone-enrollment samples are kept. Cancelled or
+              failed captures do not change saved data.
+            </label>
+            <Button
+              className="mt-4"
+              variant="outline"
+              disabled={
+                locked ||
+                !cameraValid ||
+                !localNumber.trim() ||
+                !localName.trim()
+              }
+              onClick={() =>
+                run("demo/enroll", {
+                  ...cameraBody,
+                  student_no: localNumber.trim(),
+                  full_name: localName.trim(),
+                  replace_existing: replaceExisting,
+                })
+              }
+            >
+              Start local enrollment
+            </Button>
+            <p className="mt-2 text-xs text-muted-foreground">
+              Ask volunteers for consent before capture. Models and vision
+              dependencies must already be installed on this PC. DroidCam still
+              needs its PC connection (USB or local Wi-Fi); cloud internet is
+              not needed. When capture finishes, check the task output for
+              “Saved” before starting recognition. Press q/Esc in the capture
+              window or Cancel enrollment to abandon a capture.
+            </p>
           </section>
           <section className="mt-7 border-t pt-6">
             <div className="flex flex-wrap items-center justify-between gap-3">

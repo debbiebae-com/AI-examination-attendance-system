@@ -275,7 +275,9 @@ export function Dashboard() {
     {
       label: "Present",
       value: feed && !error ? feed.attendance.length : "—",
-      note: "Saved examination records",
+      note: live?.demo_mode
+        ? "Saved demonstration records"
+        : "Saved examination records",
     },
     {
       label: "Identified",
@@ -588,12 +590,12 @@ export function Dashboard() {
                     className="rounded-md font-mono text-xs"
                   >
                     {live?.demo_classroom
-                      ? "DEMO CLASSROOM"
+                      ? "DEMONSTRATION"
                       : exam?.course_code || "No exam"}
                   </Badge>
                   <h2 className="text-sm font-medium">
                     {live?.demo_classroom
-                      ? live.classroom_name || "Test classroom 1"
+                      ? "Recognition demonstration"
                       : exam?.course_title || "No examination selected"}
                   </h2>
                 </div>
@@ -616,14 +618,16 @@ export function Dashboard() {
                   [
                     "Venue",
                     live?.demo_classroom
-                      ? "Test classroom 1"
+                      ? "Recognition demonstration"
                       : exam?.hall || "Not selected",
                   ],
                   [
-                    "Scheduled time",
-                    exam
-                      ? `${time(exam.starts_at)} – ${time(exam.ends_at)} GMT`
-                      : "No schedule",
+                    live?.demo_mode ? "Recording mode" : "Scheduled time",
+                    live?.demo_mode
+                      ? "Enrolled faces · demonstration only"
+                      : exam
+                        ? `${time(exam.starts_at)} – ${time(exam.ends_at)} GMT`
+                        : "No schedule",
                   ],
                   [
                     "Session started",

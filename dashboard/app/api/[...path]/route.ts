@@ -5,7 +5,7 @@ export const dynamic = "force-dynamic";
 const readPaths =
   /^(live\/session|students|exams|exams\/\d+\/attendance|control\/(status|readiness))$/;
 const writePaths =
-  /^control\/(camera\/(start|stop|check)|sync|register|(delete|presentation)\/(preview|confirm))$/;
+  /^control\/(camera\/(start|stop|check)|demo\/(enroll|sync|reset\/(preview|confirm))|sync|register|(delete|presentation)\/(preview|confirm))$/;
 async function proxy(
   request: NextRequest,
   context: { params: Promise<{ path: string[] }> },

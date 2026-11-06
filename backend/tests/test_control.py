@@ -301,3 +301,123 @@ def test_presentation_reset_preserves_saved_attendance(api, session, monkeypatch
     assert snapshot["exam_id"] == 1
     assert snapshot["classroom_name"] == "Test classroom 1"
     assert session.scalar(select(func.count(AttendanceRecord.id))) == 1
+
+
+def test_demo_start_needs_no_exam_or_registration_and_preserves_normal_rules(api, session, monkeypatch):
+    from app.demo import demo_exam, DEMO_CODE
+    calls = []
+    monkeypatch.setattr(control.jobs, "start", lambda kind, args: calls.append((kind, args)))
+    before = session.scalar(select(func.count(Registration.id)))
+    session.rollback()
+    result = api.post("/control/camera/start", json={"demo_mode": True, "camera": 1, "source": "droidcam"})
+    assert result.status_code == 200, result.text
+    kind, args = calls[0]
+    assert kind == "camera"
+    assert args[args.index("--exam") + 1] == DEMO_CODE
+    assert "--demo-mode" in args
+    assert args[args.index("--camera-source") + 1] == "droidcam"
+    assert session.scalar(select(func.count(Registration.id))) == before
+    assert demo_exam(session).course_code == DEMO_CODE
+
+
+def test_demo_readiness_requires_only_enrolled_faces(api, session):
+    person = session.scalar(select(Student).where(Student.student_no == "UGS-26-020"))
+    person.fees_cleared = False
+    person.suspended = True
+    session.add(FaceEmbedding(student_id=person.id, embedding=b"test", source_photo="capture:straight", det_score=1))
+    session.commit()
+    data = api.get("/control/readiness?demo=true").json()
+    row = next(p for p in data if p["student_no"] == person.student_no)
+    assert row["ready"] and not row["reasons"]
+    assert person.suspended and not person.fees_cleared
+
+
+def test_combined_demo_reset_repeats_round_and_preserves_real_records(api, session, monkeypatch, tmp_path):
+    from app.attendance import mark_attendance
+    from app.demo import demo_exam
+    from app.live import LiveStore, LivePublisher
+    store = LiveStore(tmp_path / "live.db")
+    monkeypatch.setattr(control, "LiveStore", lambda: store)
+    import app.main as main_module
+    monkeypatch.setattr(main_module, "LiveStore", lambda: store)
+    monkeypatch.setattr(control, "demo_reset_plans", {})
+    exam = demo_exam(session, create=True)
+    exam_id = exam.id
+    person = session.scalar(select(Student).where(Student.student_no == "UGS-26-001"))
+    session.add(FaceEmbedding(student_id=person.id, embedding=b"test", source_photo="capture:straight", det_score=1))
+    session.commit()
+    mark_attendance(session, exam_id=1, student_no=person.student_no)
+    mark_attendance(session, exam_id=exam_id, student_no=person.student_no, demonstration=True)
+    counts = [session.scalar(select(func.count(model.id))) for model in (Student, FaceEmbedding, Registration)]
+    session.rollback()
+    with LivePublisher(exam_id, store=store) as live:
+        live.payload.update(demo_mode=True, demo_classroom=True)
+        live.event("identified", student_no=person.student_no)
+    assert api.get("/live/session").json()["present_count"] == 1
+    response = api.post("/control/demo/reset/preview", json={})
+    plan = response.json()
+    assert plan["counts"] == {"attendance_records": 1, "activity_events": 2, "identified_count": 1}
+    assert api.post("/control/demo/reset/confirm", json={"token": plan["token"], "confirmation": "no"}).status_code == 400
+    result = api.post("/control/demo/reset/confirm", json={"token": plan["token"], "confirmation": "RESET"})
+    assert result.status_code == 200, result.text
+    assert store.read()["events"] == [] and store.read()["identified_count"] == 0
+    assert store.read()["demo_mode"] and store.read()["exam_id"] == exam_id
+    assert api.get("/live/session").json()["present_count"] == 0
+    assert session.scalar(select(func.count(AttendanceRecord.id)).where(AttendanceRecord.exam_id == 1)) == 1
+    assert session.scalar(select(func.count(AttendanceRecord.id)).where(AttendanceRecord.exam_id == exam_id)) == 0
+    assert [session.scalar(select(func.count(model.id))) for model in (Student, FaceEmbedding, Registration)] == counts
+    _, created = mark_attendance(session, exam_id=exam_id, student_no=person.student_no, demonstration=True)
+    assert created
+    assert api.post("/control/demo/reset/confirm", json={"token": plan["token"], "confirmation": "RESET"}).status_code == 409
+
+
+def test_demo_reset_guards_changed_live_and_expiry_and_active_tasks(api, session, monkeypatch, tmp_path):
+    from app.live import LiveStore, LivePublisher
+    store = LiveStore(tmp_path / "live.db")
+    monkeypatch.setattr(control, "LiveStore", lambda: store)
+    monkeypatch.setattr(control, "demo_reset_plans", {})
+    plan = api.post("/control/demo/reset/preview", json={}).json()
+    with LivePublisher(1, store=store):
+        assert api.post("/control/demo/reset/preview", json={}).status_code == 409
+        assert api.post("/control/demo/reset/confirm", json={"token": plan["token"], "confirmation": "RESET"}).status_code == 409
+    assert api.post("/control/demo/reset/confirm", json={"token": plan["token"], "confirmation": "RESET"}).status_code == 409
+    plan = api.post("/control/demo/reset/preview", json={}).json()
+    _, exam_id, snapshot = control.demo_reset_plans[plan["token"]]
+    control.demo_reset_plans[plan["token"]] = (0, exam_id, snapshot)
+    assert api.post("/control/demo/reset/confirm", json={"token": plan["token"], "confirmation": "RESET"}).status_code == 409
+
+
+def test_local_enrollment_uses_selected_camera_model_and_explicit_replacement(api, session, monkeypatch):
+    calls = []
+    monkeypatch.setattr(control.sys, "platform", "win32")
+    monkeypatch.setattr(control.jobs, "start", lambda kind, args: calls.append((kind, args)))
+    payload = {"student_no": "VOL-NEW", "full_name": "New Volunteer", "camera": 1, "source": "droidcam", "capture_backend": "msmf"}
+    response = api.post("/control/demo/enroll", json=payload)
+    assert response.status_code == 200, response.text
+    kind, args = calls[0]
+    assert kind == "local_enroll" and args[0] == "app.vision.capture"
+    assert "--student-no=VOL-NEW" in args and "--name=New Volunteer" in args
+    assert args[args.index("--camera-source") + 1] == "droidcam"
+    assert args[args.index("--capture-backend") + 1] == "msmf"
+    assert args[args.index("--model") + 1] == control.ENROLL_MODEL
+    assert "--stop-file" in args
+    assert session.scalar(select(Student).where(Student.student_no == "VOL-NEW")) is None
+    payload["student_no"] = "UGS-26-001"
+    assert api.post("/control/demo/enroll", json=payload).status_code == 409
+    assert api.post("/control/demo/enroll", json={**payload, "replace_existing": True}).status_code == 200
+    assert api.post("/control/demo/enroll", json={**payload, "full_name": ""}).status_code == 422
+    assert api.post("/control/demo/enroll", json={**payload, "student_no": "invalid\nID"}).status_code == 422
+
+
+def test_local_enrollment_blocks_concurrent_camera_and_can_cancel(api, monkeypatch):
+    control.jobs.kind = "local_enroll"
+    control.jobs.process = SimpleNamespace(poll=lambda: None)
+    assert api.post("/control/demo/enroll", json={"student_no": "NEW", "full_name": "New"}).status_code == 409
+    assert api.post("/control/demo/reset/preview", json={}).status_code == 409
+    assert api.post("/control/camera/stop", json={}).status_code == 200
+    assert control.jobs.stop_path.read_text() == "stop"
+
+
+def test_new_demo_routes_require_local_authorization(api):
+    for path in ("enroll", "sync", "reset/preview", "reset/confirm"):
+        assert api.post(f"/control/demo/{path}", json={}, headers={"X-Local-Control": "wrong"}).status_code == 403

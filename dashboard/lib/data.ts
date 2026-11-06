@@ -42,6 +42,7 @@ export type LiveEvent = {
   similarity?: number;
 };
 export type Session = {
+  demo_mode?: boolean;
   demo_classroom?: boolean;
   classroom_name?: string | null;
   camera_source?: "pc" | "droidcam";

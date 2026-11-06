@@ -20,6 +20,7 @@ from sqlalchemy.orm import Session
 from app.cleanup import CleanupPlan, execute_cleanup
 from app.config import DATA_DIR, BASE_DIR, SUPABASE_URL, SUPABASE_SERVICE_KEY, ENROLL_MODEL
 from app.db import get_session
+from app.demo import demo_exam
 from app.eligibility import check_eligibility
 from app.live import LiveStore
 from app.models import AttendanceRecord, Exam, FaceEmbedding, Registration, Student
@@ -74,7 +75,7 @@ class Jobs:
         self.idle()
         self.lines.clear()
         self.code = None
-        if kind == "camera":
+        if kind in ("camera", "local_enroll"):
             self.stop_path.unlink(missing_ok=True)
         try:
             self.process = subprocess.Popen([sys.executable, "-u", "-m", *args], cwd=BASE_DIR,
@@ -124,7 +125,8 @@ class CameraDevice(BaseModel):
 
 
 class CameraSelection(CameraDevice):
-    exam_id: int
+    exam_id: int | None = None
+    demo_mode: bool = False
     demo_classroom: bool = False
 
 
@@ -182,14 +184,15 @@ def status():
 
 
 @router.get("/readiness", dependencies=[Depends(authorize)])
-def readiness(exam_id: int, session: Session = Depends(get_session)):
-    get_exam(session, exam_id)
+def readiness(exam_id: int | None = None, demo: bool = False, session: Session = Depends(get_session)):
+    if not demo:
+        get_exam(session, exam_id)
     registered = set(session.scalars(select(Registration.student_id).where(Registration.exam_id == exam_id)))
     result = []
     for person in session.scalars(select(Student).order_by(Student.student_no)):
         samples = len(list(session.scalars(select(FaceEmbedding.id).where(FaceEmbedding.student_id == person.id))))
         eligible = check_eligibility(registered=person.id in registered, fees_cleared=person.fees_cleared, suspended=person.suspended)
-        reasons = eligible.reasons + ([] if samples else ["No face samples — sync/enroll first"])
+        reasons = ([] if demo else eligible.reasons) + ([] if samples else ["No face samples — sync/enroll first"])
         result.append({"student_no": person.student_no, "full_name": person.full_name,
                        "face_samples": samples, "registered": person.id in registered,
                        "ready": not reasons, "reasons": reasons})
@@ -199,10 +202,11 @@ def readiness(exam_id: int, session: Session = Depends(get_session)):
 @router.post("/camera/start", dependencies=[Depends(authorize)])
 def start_camera(body: CameraSelection, session: Session = Depends(get_session)):
     with jobs.lock:
-        exam = get_exam(session, body.exam_id)
+        jobs.idle()
+        exam = demo_exam(session, create=True) if body.demo_mode else get_exam(session, body.exam_id)
         jobs.start("camera", ["app.vision.attend", "--exam", exam.course_code, *camera_args(body),
                               "--det-size", "480", "--threads", "4", "--model", ENROLL_MODEL, "--stop-file", str(jobs.stop_path),
-                              *(["--demo-classroom"] if body.demo_classroom else [])])
+                              *(["--demo-classroom"] if body.demo_classroom else []), *(["--demo-mode"] if body.demo_mode else [])])
         jobs.camera_info = body.model_dump(exclude={"exam_id"})
         return jobs.status()
 
@@ -220,8 +224,8 @@ def check_camera(body: CameraDevice):
 @router.post("/camera/stop", dependencies=[Depends(authorize)])
 def stop_camera():
     with jobs.lock:
-        if jobs.process is None or jobs.process.poll() is not None or jobs.kind != "camera":
-            raise HTTPException(409, "No dashboard-started camera to stop; close an external camera window with q")
+        if jobs.process is None or jobs.process.poll() is not None or jobs.kind not in ("camera", "local_enroll"):
+            raise HTTPException(409, "No dashboard-started camera task to stop; close an external camera window with q")
         # Cooperative stop lets attendance flush stopped state and release the camera.
         jobs.stop_path.write_text("stop")
         return {"message": "Stop requested; camera will close after the current inference/model load"}
@@ -366,3 +370,92 @@ def confirm_presentation(body: DeleteConfirmation, session: Session = Depends(ge
             session.rollback()
             raise
         return {"message": message}
+
+
+class LocalEnrollment(CameraDevice):
+    model_config = {"str_strip_whitespace": True}
+    student_no: str = Field(min_length=1, max_length=32, pattern=r"^[A-Za-z0-9/_-]+$")
+    full_name: str = Field(min_length=1, max_length=120, pattern=r"^[^\x00-\x1f\x7f]+$")
+    replace_existing: bool = False
+
+
+@router.post("/demo/enroll", dependencies=[Depends(authorize)])
+def local_enrollment(body: LocalEnrollment, session: Session = Depends(get_session)):
+    with jobs.lock:
+        jobs.idle()
+        args = camera_args(body)
+        number = body.student_no.upper()
+        existing = session.scalar(select(Student).where(Student.student_no == number))
+        if existing is not None and not body.replace_existing:
+            raise HTTPException(409, "This index already exists. Confirm re-enrollment to replace its local capture samples.")
+        jobs.start("local_enroll", ["app.vision.capture", f"--student-no={number}", f"--name={body.full_name}",
+                                  *args, "--model", ENROLL_MODEL, "--det-size", "480", "--threads", "4",
+                                  "--stop-file", str(jobs.stop_path)])
+        jobs.camera_info = body.model_dump(include={"camera", "source", "capture_backend"})
+        return jobs.status()
+
+
+@router.post("/demo/sync", dependencies=[Depends(authorize)])
+def demo_sync(session: Session = Depends(get_session)):
+    with jobs.lock:
+        jobs.idle()
+        if not SUPABASE_URL or not SUPABASE_SERVICE_KEY:
+            raise HTTPException(409, "Online sync is not configured. Use Enroll locally instead.")
+        # Recognition demonstration never requires exam registration, including submissions
+        # naming a different exam. Preserve the existing cloud inbox sync behavior.
+        exam = demo_exam(session, create=True)
+        jobs.start("sync", ["app.sync", "--exam", exam.course_code])
+        return jobs.status()
+
+
+def demo_reset_snapshot(session, exam_id):
+    records = [tuple(row) for row in session.execute(select(AttendanceRecord.id, AttendanceRecord.student_id, AttendanceRecord.recorded_at, AttendanceRecord.source).where(AttendanceRecord.exam_id == exam_id).order_by(AttendanceRecord.id))]
+    live = LiveStore().read()
+    version = [live.get(k) for k in ("session_id", "updated_at", "latest_event_id")]
+    return (records, version), {"attendance_records": len(records), "activity_events": len(live.get("events", [])), "identified_count": live.get("identified_count", 0)}
+
+
+demo_reset_plans = {}
+
+
+@router.post("/demo/reset/preview", dependencies=[Depends(authorize)])
+def preview_demo_reset(session: Session = Depends(get_session)):
+    with jobs.lock:
+        jobs.idle()
+        exam = demo_exam(session, create=True)
+        snapshot, counts = demo_reset_snapshot(session, exam.id)
+        now = time.monotonic()
+        for token in list(demo_reset_plans):
+            if demo_reset_plans[token][0] < now:
+                del demo_reset_plans[token]
+        if len(demo_reset_plans) >= 100:
+            demo_reset_plans.clear()
+        token = secrets.token_urlsafe(32)
+        demo_reset_plans[token] = (now + 120, exam.id, snapshot)
+        return {"token": token, "counts": counts, "expires_in": 120}
+
+
+@router.post("/demo/reset/confirm", dependencies=[Depends(authorize)])
+def confirm_demo_reset(body: DeleteConfirmation, session: Session = Depends(get_session)):
+    from sqlalchemy import delete
+    with jobs.lock:
+        jobs.idle()
+        if body.confirmation != "RESET":
+            raise HTTPException(400, "Confirm the demonstration reset")
+        plan = demo_reset_plans.pop(body.token, None)
+        if plan is None or plan[0] < time.monotonic():
+            raise HTTPException(409, "Preview expired; review the reset again")
+        try:
+            if session.get_bind().dialect.name == "sqlite":
+                session.execute(text("BEGIN IMMEDIATE"))
+            snapshot, _ = demo_reset_snapshot(session, plan[1])
+            if snapshot != plan[2]:
+                raise HTTPException(409, "Demonstration changed; review the reset again")
+            # Check ownership under the live store's own write lock before touching attendance.
+            LiveStore().reset_display(snapshot[1], exam_id=plan[1], demo_mode=True)
+            session.execute(delete(AttendanceRecord).where(AttendanceRecord.exam_id == plan[1]))
+            session.commit()
+        except Exception:
+            session.rollback()
+            raise
+        return {"message": "Demonstration reset: attendance, activity and live counters cleared. Enrolled faces preserved. Click Start recognition for the next round."}

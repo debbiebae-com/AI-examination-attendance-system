@@ -57,6 +57,7 @@ def record(
     names: dict[str, str],
     events: list[str],
     live: LivePublisher | None = None,
+    demonstration: bool = False,
 ) -> None:
     name = names.get(student_no, student_no)
     stamp = datetime.now().strftime("%H:%M:%S")
@@ -68,6 +69,7 @@ def record(
                 student_no=student_no,
                 confidence=score,
                 source="camera",
+                demonstration=demonstration,
             )
         except NotEligible as exc:
             if live:
@@ -182,6 +184,7 @@ def main() -> None:
         action="store_true",
         help="enable the passive liveness model (off by default; it is unreliable on some cameras)",
     )
+    parser.add_argument("--demo-mode", action="store_true", help="Recognition-only presentation; records isolated demo attendance without exam eligibility")
     args = parser.parse_args()
     if not 0.1 <= args.det_threshold < args.track_threshold <= 0.9:
         parser.error("require 0.1 <= --det-threshold < --track-threshold <= 0.9")
@@ -193,9 +196,13 @@ def main() -> None:
         exam = session.scalar(select(Exam).where(Exam.course_code == args.exam))
         if exam is None:
             raise SystemExit(f"No exam with course code {args.exam}")
+        if args.demo_mode:
+            from app.demo import DEMO_CODE
+            if exam.course_code != DEMO_CODE:
+                raise SystemExit("Demo mode requires the isolated demonstration record")
         exam_id = exam.id
         exam_title = exam.course_title
-        exam_info = "Test classroom 1 | Sample examinations (fictional)" if args.demo_classroom else f"{exam.course_code} | {exam.course_title} | {exam.hall}"
+        exam_info = "Recognition demonstration | Sample examinations (fictional)" if (args.demo_classroom or args.demo_mode) else f"{exam.course_code} | {exam.course_title} | {exam.hall}"
         matcher = load_matcher(session, threshold=args.threshold, margin=args.margin)
         students = session.scalars(select(Student)).all()
         names = {s.student_no: s.full_name for s in students}
@@ -205,7 +212,7 @@ def main() -> None:
         raise SystemExit("No enrolled faces found. Run the capture or photo enrollment first.")
 
     with LivePublisher(exam_id) as live:
-        live.payload.update(demo_classroom=args.demo_classroom, classroom_name="Test classroom 1" if args.demo_classroom else None, camera_source=args.camera_source, camera_index=args.camera, camera_backend=args.capture_backend)
+        live.payload.update(demo_mode=args.demo_mode, demo_classroom=args.demo_classroom or args.demo_mode, classroom_name="Recognition demonstration" if (args.demo_classroom or args.demo_mode) else None, camera_source=args.camera_source, camera_index=args.camera, camera_backend=args.capture_backend)
         live.store.publish(live.payload)
         print(f"Exam {args.exam}: {exam_title}. {len(matcher)} face samples loaded.")
         print("Loading InsightFace...")
@@ -277,14 +284,14 @@ def main() -> None:
                             decider=decider,
                             names=names,
                             events=events,
-                            live=live,
+                            live=live, demonstration=args.demo_mode,
                         )
 
                 # Bound overlay history separately from the structured event ring.
                 del events[:-MAX_EVENTS_SHOWN]
                 live.frame(visible_faces=len(faces), states=states, fps=fps_meter.fps,
                            processing_ms=(perf_counter() - began) * 1000)
-                draw(image, faces, ids, tracker, decider, names, events, fps_meter.fps, academic, exam_info, args.demo_classroom)
+                draw(image, faces, ids, tracker, decider, names, events, fps_meter.fps, academic, exam_info, args.demo_classroom or args.demo_mode)
                 cv2.imshow(WINDOW, image)
                 fps_meter.tick()
                 if cv2.waitKey(1) & 0xFF == ord("q"):

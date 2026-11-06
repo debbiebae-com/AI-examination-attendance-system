@@ -53,7 +53,7 @@ export function AttendanceCharts({
             {illustration
               ? "illustrative data"
               : feed?.session.demo_classroom
-                ? "Test classroom 1 records"
+                ? "Demonstration records"
                 : "selected examination"}
           </p>
         </div>

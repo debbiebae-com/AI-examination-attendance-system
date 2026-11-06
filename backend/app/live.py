@@ -51,7 +51,7 @@ class LiveStore:
                     raise RuntimeError("Another attendance session owns the live feed")
             db.execute("INSERT OR REPLACE INTO live VALUES (1, ?)", (json.dumps(payload),))
 
-    def reset_display(self, expected):
+    def reset_display(self, expected, *, exam_id=None, demo_mode=False):
         """Atomically clear a stopped snapshot, never a newly claimed camera session."""
         from fastapi import HTTPException
         with self._connect() as db:
@@ -62,12 +62,14 @@ class LiveStore:
             if version != expected or old.get("status") in ("starting", "running"):
                 raise HTTPException(409, "Live session changed; stop recognition and preview again")
             payload = {
-                **{k: old[k] for k in ("exam_id", "demo_classroom", "classroom_name") if k in old},
+                **{k: old[k] for k in ("exam_id", "demo_mode", "demo_classroom", "classroom_name") if k in old},
                 "session_id": str(uuid4()), "status": "idle", "updated_at": stamp(),
                 "heartbeat": time.time(), "identified_count": 0, "unidentified_now": 0,
                 "visible_faces": 0, "processed_fps": 0.0, "processing_ms": 0.0,
                 "events": [], "latest_event_id": 0, "error": None,
             }
+            if demo_mode:
+                payload.update(exam_id=exam_id, demo_mode=True, demo_classroom=True, classroom_name="Recognition demonstration")
             db.execute("INSERT OR REPLACE INTO live VALUES (1, ?)", (json.dumps(payload),))
 
     def read(self, after=0):

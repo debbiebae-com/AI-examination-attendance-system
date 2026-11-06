@@ -5,7 +5,8 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from app.eligibility import check_eligibility
-from app.models import AttendanceRecord, Exam, Registration, Student
+from app.models import AttendanceRecord, Exam, Registration, Student, FaceEmbedding
+from app.demo import DEMO_CODE
 
 
 class AttendanceError(Exception):
@@ -33,6 +34,7 @@ def mark_attendance(
     student_no: str,
     confidence: float | None = None,
     source: str = "manual",
+    demonstration: bool = False,
     now: datetime | None = None,
 ) -> tuple[AttendanceRecord, bool]:
     """Record a student's attendance for an exam.
@@ -48,6 +50,13 @@ def mark_attendance(
     student = session.scalar(select(Student).where(Student.student_no == student_no))
     if student is None:
         raise UnknownStudent(f"Student {student_no} not found")
+
+    if demonstration:
+        if exam.course_code != DEMO_CODE:
+            raise AttendanceError("Demonstration attendance requires the isolated demo record")
+        if session.scalar(select(FaceEmbedding.id).where(FaceEmbedding.student_id == student.id).limit(1)) is None:
+            raise NotEligible(["No enrolled face samples"])
+        source = "demo"
 
     existing = _find_record(session, exam_id, student.id)
     if existing is not None:
@@ -67,7 +76,7 @@ def mark_attendance(
         fees_cleared=student.fees_cleared,
         suspended=student.suspended,
     )
-    if not result.eligible:
+    if not demonstration and not result.eligible:
         raise NotEligible(result.reasons)
 
     record = AttendanceRecord(

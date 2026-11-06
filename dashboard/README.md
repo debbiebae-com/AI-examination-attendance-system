@@ -269,7 +269,7 @@ accepted by these endpoints and the dashboard does not install/manage DroidCam i
 1. Stop existing recognition. Connect the phone in the DroidCam Windows client (USB preferred;
    Wi-Fi works if the client can connect). Confirm video there and keep that connection running.
 2. Close competing apps using the virtual webcam (Windows Camera, Teams, Zoom, etc.).
-3. Open **Demo controls → Recognition camera → Phone / DroidCam**.
+3. Open **Demo controls → Camera for recognition and enrollment → Phone / DroidCam**.
 4. Choose a camera number. `1` is a starting guess, **not automatic device discovery**.
    Windows backend choice defaults to DirectShow for this profile; try Automatic or Media
    Foundation if necessary. Device indices can differ by backend and after reconnecting.
@@ -277,7 +277,7 @@ accepted by these endpoints and the dashboard does not install/manage DroidCam i
    Check that the image actually comes from the phone. No identity inference, enrollment or
    attendance writes occur. A slow driver check is terminated after 20 seconds. A successful
    frame check does not prove correct identity, smooth live performance or long-term stability.
-6. After the check finishes, select the exam and **Start recognition**. Stop before switching
+6. After the check finishes, click **Start recognition**. Stop before switching
    sources. Last selected camera is shown in task details; running source/index/backend are
    also attached to the live session. The source name is a user selection, not driver identification.
 
@@ -334,38 +334,59 @@ Do not run diagnostics concurrently with recognition or other apps consuming the
 webcam. Share the resulting text and identify which preview was correct/green, not photos,
 .env files, control keys or service credentials. Windows driver testing is still user-side.
 
-## Test classroom 1 — fictional camera examination labels
+## Recognition demonstration — repeatable rounds and offline enrollment
 
-Demo controls no longer offers an examination selector. It shows **Test classroom 1** and
-uses the existing CS101 exam as the backing attendance/readiness/registration record, or
-falls back to the first returned exam if CS101 is absent. No exam/student/registration data
-is created or edited merely by selecting this presentation mode. Existing registration,
-fee/suspension checks and saved attendance behavior remain in force. Sync retains the
-submission's own exam when supplied; the classroom backing exam is only its fallback.
+The current Demo controls flow has **no classroom selector or registration buttons**:
 
-Dashboard-started recognition passes `--demo-classroom`. The camera header identifies Test
-classroom 1, and confirmed identities get a **Demo exam:** course code/title drawn from six
-fictional sample courses. A deterministic hash randomizes assignment across student indices
-while keeping each person's label stable across frames/restarts. Multiple students can share
-a sample course. New enrollments automatically receive the same display treatment when
-recognized. This is not university exam registration or a new scheduling subsystem.
+1. Select the working PC webcam or Phone / DroidCam source, index and backend.
+2. **Start recognition** to show existing enrolled faces, one or several people at a time.
+3. **Reset demonstration** safely requests camera stop and waits for the dashboard-started recognition process to exit (up to three minutes, including model loading). It then previews saved demonstration attendance, activity events and identified count. **Confirm reset demonstration** clears those records/counters together. Cancelling the preview keeps saved data; recognition remains stopped.
+4. Click **Start recognition** for a fresh round with the same enrolled faces.
 
-The live dashboard header identifies the demo classroom. Underlying exam metadata remains
-available for real attendance/export scope: CSV exports are not relabelled as the invented
-per-person exams. CLI recognition without `--demo-classroom` retains its existing real-exam
-header and does not add fictional exam labels. Camera/backend/phone capture settings and
-recognition thresholds are unchanged.
+Demonstration mode stores attendance in an automatically created internal `EXAMLENS-DEMO`
+record, not CS101 or another real examination. There is no scheduling/classroom management
+step. It records enrolled, confirmed matches without checking exam registration, fee clearance
+or suspension; it does **not** change those student flags. Ordinary CLI/API exam attendance
+retains its eligibility checks. Demo CSV rows have source `demo` and the isolated demo code;
+fictional per-person **Demo exam:** overlay labels remain display-only and stable per index.
+ByteTrack, buffalo_l/model configuration, recognition thresholds, and driver camera format
+are unchanged.
 
-### Presentation Tools — Stage 1
+The reset requires authorized local controls and a two-minute, single-use preview. It refuses
+changed records, active/external live sessions and concurrent capture/sync/check tasks. It
+keeps all student records, face samples, registrations and other exams' saved attendance.
+Historic CS101 attendance from older versions is not silently deleted or migrated. The live
+view switches to the isolated demonstration scope after starting recognition or resetting.
+Export a demonstration round before resetting if you need its results.
 
-In **Demo controls → Presentation Tools**, stop recognition before preparing or resetting a round:
+### New volunteers: online or local
 
-- **Register all volunteers** previews the locally stored volunteer count and missing registrations, then adds only missing registrations to Test classroom 1's backing exam. It does not change fee/suspension flags or enroll faces.
-- **Clear classroom attendance** previews and deletes attendance only for the classroom backing exam. Students, face samples, registrations, exams, and other exams' attendance remain intact. Start recognition again for a fresh round; a volunteer can then be recorded again. Export attendance first if you need to keep a round's results.
-- **Reset live display** previews activity-event and identified counts and clears only the stopped live snapshot. Saved attendance and attendance-based totals remain unchanged. Classroom/exam context is retained.
+- **Online:** keep the existing enrollment link, then stop recognition and click **Sync
+  submissions**. Start recognition again to reload the gallery. No manual registration step
+  is needed for demonstration mode, regardless of the submission's exam assignment.
+- **Offline/local:** stop recognition. Enter a volunteer ID/index and name in **Enroll
+  locally**, then **Start local enrollment**. The existing guided desktop capture opens on
+  the backend PC, using the exact selected source/index/backend above — laptop webcam or
+  DroidCam. One person looks straight, turns left, then right. Accepted embeddings are saved
+  directly into the local gallery, without Supabase, a phone-browser link or cloud sync.
+  Wait for `Saved ... face samples` in task output, then start recognition. The guide does not
+  provide certified anti-spoofing; it is the existing guided turn capture, not a new security
+  claim.
 
-Every action requires explicit confirmation of a two-minute, single-use preview. Changed records invalidate the preview. Recognition and other active demo tasks block these actions, including externally started live sessions. Do not run a separate recognition CLI concurrently with dashboard preparation.
+The PC must already have its vision dependencies and full enrollment model pack installed.
+Run a local enrollment once before the event, then test with internet disabled. Models may
+need downloading on first use. DroidCam still needs its working PC client and USB/local
+Wi-Fi connection; it does not require cloud internet for this local capture path. This is
+not an offline multi-phone web-enrollment server.
 
-Student deletion is separate, under **Advanced student deletion**. **Delete other students…** replaces the old “Keep only selected…” wording and still previews the unselected people, with typed `DELETE` confirmation. It deletes student data; it is not an attendance reset.
+Use **Cancel enrollment** or q/Esc in the desktop capture window to abandon capture. Stop is
+cooperative and may wait for model/inference work. A failed/cancelled capture does not create
+an empty student or replace existing samples. Re-enrolling an existing ID requires an
+explicit checkbox; successful capture replaces only that person's `capture:` samples,
+keeping their stored name, flags, phone samples, registrations and attendance.
 
-Readiness-check and diagnostic-report buttons are deferred to Stage 2. Existing camera configuration and recognition behavior are unchanged.
+**Advanced student deletion** remains separate: **Delete other students…** previews the
+unselected people and requires typed `DELETE`. It deletes student data, not just attendance.
+Readiness/diagnostic-report expansion is deferred; the roster already shows which people
+have face samples. Actual Windows/DroidCam guided capture still requires user-side testing;
+sandbox tests simulate devices/models, alongside browser checks of controls and reset flow.

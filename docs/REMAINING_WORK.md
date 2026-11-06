@@ -225,3 +225,10 @@ PC processes to see the new overlays; no new hardware-camera changes were made.
 ### Presentation tools increment
 - Stage 1 implemented: preview/confirm register all local volunteers, clear classroom backing-exam attendance, and reset stopped live display without deleting saved attendance. Student deletion is separated under Advanced student deletion; “Keep only selected” is renamed “Delete other students”.
 - Stage 2 pending user review: explicit system-readiness check and sanitized diagnostic report copy. Do not add the deferred all-exam reset, selected-attendance reset, automatic retry, or camera-setting persistence.
+
+## Current presentation flow (supersedes classroom/Stage 1 controls)
+
+- Implemented: one Reset demonstration with safe managed-camera stop, count preview, confirmation and combined isolated-demo attendance/live reset. No classroom picker or manual registration buttons. Internal EXAMLENS-DEMO scope protects real exam history; ordinary exam eligibility is unchanged.
+- Implemented: Enroll locally through the existing desktop guided capture using the selected PC or DroidCam source/index/backend, matched model pack, cancellation and explicit re-enrollment safeguard. Successful capture saves directly to local gallery; failed/cancelled capture saves nothing. Online inbox sync is retained.
+- Pending user-side verification: actual Windows guided enrollment through working DroidCam, single-/multi-person recognition, reset/repeat, and enrollment with internet disabled after models are installed. No sandbox hardware claim.
+- Defer extra readiness/diagnostics UI until the user reviews this smaller workflow. Do not reintroduce registration/classroom administration or all-exam deletion.

@@ -35,6 +35,7 @@ inverted (useful when a phone-as-webcam app already mirrors its feed).
 
 import argparse
 import time
+from pathlib import Path
 
 import cv2
 from sqlalchemy import select
@@ -42,6 +43,7 @@ from sqlalchemy import select
 from app.db import SessionLocal, engine
 from app.models import Base, Exam, Registration, Student
 from app.vision.camera import CameraReader, FpsMeter
+from app.vision.camera_source import open_camera
 from app.vision.capture_flow import (
     PROMPTS,
     STEPS,
@@ -67,7 +69,7 @@ DIM = (170, 170, 170)
 PANEL = (30, 30, 30)
 
 
-def get_or_create_student(session, student_no: str, name: str | None, exam_code: str | None) -> Student:
+def get_or_create_student(session, student_no: str, name: str | None, exam_code: str | None, *, commit=True) -> Student:
     student = session.scalar(select(Student).where(Student.student_no == student_no))
     if student is None:
         if not name:
@@ -93,7 +95,8 @@ def get_or_create_student(session, student_no: str, name: str | None, exam_code:
         if already is None:
             session.add(Registration(student_id=student.id, exam_id=exam.id))
 
-    session.commit()
+    if commit:
+        session.commit()
     return student
 
 
@@ -254,13 +257,19 @@ def main() -> None:
         action="store_true",
         help="enable the passive liveness model (off by default; the turn challenge is always active)",
     )
+    parser.add_argument("--camera-source", choices=["pc", "droidcam"], default="pc")
+    parser.add_argument("--capture-backend", choices=["auto", "dshow", "msmf"], default="auto")
+    parser.add_argument("--model", default="buffalo_l")
+    parser.add_argument("--stop-file", type=Path)
     args = parser.parse_args()
 
     mirrored = not args.no_mirror
     Base.metadata.create_all(engine)
     with SessionLocal() as session:
-        student = get_or_create_student(session, args.student_no, args.name, args.exam)
-        student_id, full_name = student.id, student.full_name
+        student = session.scalar(select(Student).where(Student.student_no == args.student_no))
+        if student is None and not args.name:
+            raise SystemExit("Provide a full name for a new volunteer")
+        full_name = student.full_name if student else args.name
 
     print("Loading InsightFace (the first run downloads the models)...")
     if args.liveness:
@@ -268,12 +277,13 @@ def main() -> None:
     else:
         print("Passive liveness check: OFF (the left/right turn challenge still proves liveness)")
     embedder = InsightFaceEmbedder(
-        liveness=args.liveness, det_size=(args.det_size, args.det_size), threads=args.threads
+        model_name=args.model, liveness=args.liveness, det_size=(args.det_size, args.det_size), threads=args.threads
     )
 
-    camera = cv2.VideoCapture(args.camera)
-    if not camera.isOpened():
-        raise SystemExit(f"Cannot open camera {args.camera}. Try --camera 1.")
+    if args.stop_file and args.stop_file.exists():
+        print("Cancelled. Nothing was saved.")
+        return
+    camera = open_camera(args.camera, args.capture_backend, args.camera_source == "droidcam")
     try:
         camera.set(cv2.CAP_PROP_BUFFERSIZE, 1)
     except Exception:
@@ -290,6 +300,9 @@ def main() -> None:
 
     try:
         while not sequence.done:
+            if args.stop_file and args.stop_file.exists():
+                cancelled = True
+                break
             if reader.error:
                 raise SystemExit(reader.error)
             seq_id, frame = reader.read()
@@ -329,6 +342,9 @@ def main() -> None:
         # Drain the embedding worker while keeping the window responsive.
         if not cancelled:
             while worker.pending > 0:
+                if args.stop_file and args.stop_file.exists():
+                    cancelled = True
+                    break
                 if last_display is not None:
                     finishing = last_display.copy()
                     _panel(finishing, 0, 0, finishing.shape[1], finishing.shape[0], 0.5)
@@ -356,8 +372,12 @@ def main() -> None:
             print(f"  - {message}")
         raise SystemExit(1)
 
+    if args.stop_file and args.stop_file.exists():
+        print("Cancelled. Nothing was saved.")
+        return
     with SessionLocal() as session:
-        save_capture_samples(session, student_id, samples)
+        student = get_or_create_student(session, args.student_no, args.name, args.exam, commit=False)
+        save_capture_samples(session, student.id, samples)
     print(f"Saved {len(samples)} face samples for {full_name} ({args.student_no}).")
 
 

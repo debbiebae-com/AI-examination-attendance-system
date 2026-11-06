@@ -102,3 +102,77 @@ def test_unmirrored_feed_also_completes():
     assert sequence.done
     assert not problems and live_ok
     assert len(samples) == 9
+
+
+@pytest.mark.parametrize("cancel,existing", [(False, False), (True, False), (False, True), (True, True)])
+def test_desktop_capture_main_selected_droidcam_and_atomic_save(session, monkeypatch, tmp_path, cancel, existing):
+    from contextlib import contextmanager
+    from types import SimpleNamespace
+    import sys
+    from app.vision import capture
+
+    @contextmanager
+    def local_session():
+        yield session
+
+    if existing:
+        previous = Student(student_no="LOCAL-NEW", full_name="Original name", programme="Volunteer", level=100, fees_cleared=False, suspended=True)
+        session.add(previous)
+        session.flush()
+        session.add_all([FaceEmbedding(student_id=previous.id, embedding=b"old", source_photo="capture:straight:0", det_score=1), FaceEmbedding(student_id=previous.id, embedding=b"phone", source_photo="web:straight:0", det_score=1)])
+        session.commit()
+    calls = []
+    stopped = []
+    counter = {"n": 0}
+    class Reader:
+        error = None
+        def __init__(self, camera):
+            pass
+        def start(self):
+            return self
+        def read(self):
+            counter["n"] += 1
+            return counter["n"], np.zeros(SHAPE, dtype=np.uint8)
+        def stop(self):
+            stopped.append(True)
+
+    def guide(frame):
+        n = counter["n"]
+        if n > 200:
+            raise AssertionError("Guided capture did not complete")
+        yaw = 0 if n <= 40 else -30 if n <= 90 else 30
+        return [GuidedFace(bbox=(160, 120, 480, 360), score=0.95, pose=(0, yaw, 0), eye_ratio=0.3)]
+
+    def model(**kwargs):
+        calls.append(kwargs)
+        return SimpleNamespace(guide=guide, embed=fake_embed())
+
+    monkeypatch.setattr(capture, "engine", session.get_bind())
+    monkeypatch.setattr(capture, "SessionLocal", local_session)
+    monkeypatch.setattr(capture, "InsightFaceEmbedder", model)
+    monkeypatch.setattr(capture, "open_camera", lambda *args: calls.append(args))
+    monkeypatch.setattr(capture, "CameraReader", Reader)
+    monkeypatch.setattr(capture.cv2, "imshow", lambda *args: None)
+    monkeypatch.setattr(capture.cv2, "destroyAllWindows", lambda: None)
+    monkeypatch.setattr(capture.cv2, "waitKey", lambda _: ord("q") if cancel else -1)
+    monkeypatch.setattr(sys, "argv", ["capture", "--student-no=LOCAL-NEW", "--name=Local Volunteer", "--camera", "1", "--camera-source", "droidcam", "--capture-backend", "msmf", "--model", "buffalo_l", "--threads", "4"])
+    capture.main()
+    assert calls[0]["model_name"] == "buffalo_l"
+    assert calls[1] == (1, "msmf", True)
+    assert stopped
+    person = session.scalar(select(Student).where(Student.student_no == "LOCAL-NEW"))
+    if cancel and not existing:
+        assert person is None
+    else:
+        assert person is not None
+        rows = list(session.scalars(select(FaceEmbedding).where(FaceEmbedding.student_id == person.id)))
+        captures = [row for row in rows if row.source_photo.startswith("capture:")]
+        if existing:
+            assert person.full_name == "Original name"
+            assert not person.fees_cleared and person.suspended
+            assert [row.embedding for row in rows if row.source_photo.startswith("web:")] == [b"phone"]
+        if cancel:
+            assert [row.embedding for row in captures] == [b"old"]
+        else:
+            assert len(captures) == 9
+            assert all(row.embedding != b"old" for row in captures)
