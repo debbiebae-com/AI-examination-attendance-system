@@ -167,3 +167,86 @@ a:focus-visible {
 .palette-stat {
   --heading-color: #0a3d4a;
 }
+
+/* Iteration 2: strong palette presence; light surfaces remain only for dense data. */
+.dashboard-canvas {
+  background: #10606f;
+}
+.palette-page-heading {
+  color: #ffffff;
+  --muted-foreground: #e2f4f0;
+}
+.palette-page-heading [data-variant="outline"] {
+  background: #e2f4f0;
+  color: #0a3d4a;
+  border-color: #98d8d0;
+}
+.palette-page-heading [data-variant="default"] {
+  background: #04222b;
+  color: #ffffff;
+}
+.palette-exam-heading {
+  background: #10606f;
+  color: #ffffff;
+}
+.palette-exam-heading .bg-secondary {
+  background: #4fb8b4;
+  color: #04222b;
+}
+.palette-stat {
+  --gray-11: #e2f4f0;
+  --heading-color: #ffffff;
+  color: #ffffff;
+  background: #10606f;
+}
+.palette-stat::before {
+  background: #0a3d4a;
+}
+.palette-stat:nth-child(2)::before {
+  background: #04222b;
+}
+.palette-stat:nth-child(3)::before {
+  background: #4fb8b4;
+}
+.palette-stat:nth-child(3) {
+  --gray-11: #04222b;
+  --heading-color: #04222b;
+  color: #04222b;
+}
+.palette-stat:nth-child(4)::before {
+  background: #0a3d4a;
+}
+.palette-stat .rt-Heading {
+  color: var(--heading-color);
+}
+.chart-heading {
+  background: #0a3d4a;
+  color: #ffffff;
+  --muted-foreground: #98d8d0;
+}
+.palette-footer {
+  color: #ffffff;
+  border-color: #4fb8b4;
+}
+
+.palette-page-heading .rt-Heading {
+  color: #ffffff;
+}
+
+.palette-stat .rt-Text {
+  color: var(--gray-11);
+}
+.palette-topbar {
+  background: #0a3d4a;
+  color: #ffffff;
+  --muted-foreground: #98d8d0;
+}
+.palette-exam-heading [data-slot="badge"] {
+  background: #e2f4f0;
+  color: #04222b;
+}
+.illustration-notice {
+  background: #4fb8b4;
+  color: #04222b;
+  --muted-foreground: #04222b;
+}

@@ -166,3 +166,11 @@ Radix heading/statistic cards; applied the user's supplied seven-colour teal pal
 shared semantic tokens and sidebar. Layout, controls and recognition behavior preserved.
 Await visual review before further layout/component migration or charts. The next proposed
 increment is a single attendance-over-time chart using saved records, not synthetic trends.
+
+### Charts and stronger colour — iteration 2
+
+User approved proceeding: added Recharts cumulative saved attendance and saved-student
+level breakdown with empty/offline states, minute aggregation, deduplication and invalid
+stamp handling. Applied a saturated teal canvas/filled metric cards while keeping dense
+records readable. No absent totals/percentages inferred. Await the next visual review
+before adding more charts or changing the layout further.

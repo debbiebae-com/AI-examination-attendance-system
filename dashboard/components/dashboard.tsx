@@ -52,6 +52,7 @@ import {
   type Feed,
   type Student,
 } from "@/lib/data";
+import { AttendanceCharts } from "@/components/attendance-charts";
 import { DemoControls } from "@/components/demo-controls";
 import { demoFeed } from "@/lib/demo";
 
@@ -239,7 +240,7 @@ export function Dashboard() {
     },
   ];
   return (
-    <div className="min-h-screen bg-background text-foreground">
+    <div className="dashboard-canvas min-h-screen text-foreground">
       <a
         href="#overview"
         className="sr-only focus:not-sr-only focus:fixed focus:left-4 focus:top-4 focus:z-[60] focus:rounded-md focus:bg-background focus:p-3"
@@ -325,7 +326,7 @@ export function Dashboard() {
         </div>
       </aside>
       <div className="min-w-0 md:ml-52">
-        <header className="flex h-14 items-center justify-between gap-3 border-b px-4 sm:px-7">
+        <header className="palette-topbar flex h-14 items-center justify-between gap-3 border-b px-4 sm:px-7">
           <div className="flex min-w-0 items-center gap-3">
             <Button
               variant="ghost"
@@ -372,7 +373,7 @@ export function Dashboard() {
           id="overview"
           className="mx-auto max-w-[1600px] space-y-6 p-4 sm:p-7 lg:p-8"
         >
-          <div className="flex flex-wrap items-start justify-between gap-4">
+          <div className="palette-page-heading flex flex-wrap items-start justify-between gap-4">
             <div>
               <Heading as="h1" size="6" weight="medium">
                 Attendance overview
@@ -407,7 +408,7 @@ export function Dashboard() {
           {illustration && (
             <div
               role="status"
-              className="flex flex-wrap items-center justify-between gap-2 rounded-md border border-dashed bg-muted/40 px-4 py-3 text-xs text-muted-foreground"
+              className="illustration-notice flex flex-wrap items-center justify-between gap-2 rounded-md border border-dashed bg-muted/40 px-4 py-3 text-xs text-muted-foreground"
             >
               <span>
                 <strong className="font-medium text-foreground">
@@ -542,6 +543,11 @@ export function Dashboard() {
               </ThemeCard>
             ))}
           </section>
+          <AttendanceCharts
+            feed={feed}
+            offline={!!error}
+            illustration={illustration}
+          />
           <div className="grid min-w-0 items-start gap-5 xl:grid-cols-[minmax(0,1fr)_290px]">
             <section id="students" className="min-w-0">
               <Tabs
@@ -810,7 +816,7 @@ export function Dashboard() {
               </Card>
             </div>
           </div>
-          <footer className="flex flex-wrap items-center justify-between gap-2 border-t pt-4 text-[10px] text-muted-foreground">
+          <footer className="palette-footer flex flex-wrap items-center justify-between gap-2 border-t pt-4 text-[10px] text-muted-foreground">
             <span>InsightFace / ByteTrack · Local processing</span>
             <span>
               {illustration

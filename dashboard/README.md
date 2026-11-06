@@ -211,3 +211,21 @@ No charts or chart dependencies have been added yet. Proposed next iteration, on
 approval: one Recharts/shadcn-style attendance-over-time chart derived from the selected
 exam's saved attendance timestamps, with honest empty/offline/illustration states. Do not
 infer absent students from the full local gallery or treat unknown tracks as unique people.
+
+### Iteration 2 — saturated palette and Recharts
+
+The workspace now uses a saturated #10606F canvas, dark teal navigation/header and filled
+statistic cards. Pale/white surfaces are retained for dense tables, chart axes and control
+panels for readability, not as the dominant workspace colour.
+
+Two responsive Recharts visuals use the selected exam's saved attendance only:
+- Cumulative attendance: chronological UTC/GMT minute buckets, stepped line and area.
+  Points start at the first saved bucket; no invented baseline or missing students.
+- Attendance by level: unique saved students grouped by presentation level (24 -> 300).
+  Missing metadata is explicitly "Not supplied". This is not the entire enrolled gallery.
+
+Duplicate student records count once (earliest valid timestamp); malformed timestamps are
+omitted from the timeline with a notice but still counted in the level chart. Empty, loading
+and disconnected charts show text instead of fabricated series. Chart animations are off;
+time-series values are also available as text. Layout preview uses explicitly fictional,
+spaced-out timestamps so the time chart can be inspected. No real attendance is modified.
