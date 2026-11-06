@@ -190,3 +190,24 @@ Camera/sync/registration/removal controls keep their existing behavior and safeg
 Regression tests specifically assert `PS/CSC/24/0016` -> **Level 300** in both the table
 and profile against an older API with stored level 100 and no display metadata, plus
 stale display overrides, unspecified year-code fallback and non-mutating behavior.
+
+## Current design iteration — Radix Themes + supplied teal palette
+
+This supersedes the stock Neutral colour treatment above. Following Radix's
+[getting started](https://www.radix-ui.com/themes/docs/overview/getting-started),
+[styling](https://www.radix-ui.com/themes/docs/overview/styling) and
+[colour](https://www.radix-ui.com/themes/docs/theme/color) guidance, iteration 1 installs
+`@radix-ui/themes`, wraps the root in its light Theme, and starts migration with native
+Heading/Text and statistic Cards. Radix CSS has its own cascade layer before utilities.
+The remaining shadcn components/controls intentionally remain in place for this review.
+
+The supplied palette is #04222B, #0A3D4A, #10606F, #1D8B94, #4FB8B4, #98D8D0 and
+#E2F4F0. CSS variables map it to both libraries, with lighter companion steps for the
+Radix 12-step accent scale. Dark ink and deeper teal are used for readable text/actions;
+light mint and brighter teals are surfaces/accents, not white-on-light-teal body text.
+
+**Review gate:** inspect palette, typography and surface treatment before changing layout.
+No charts or chart dependencies have been added yet. Proposed next iteration, only after
+approval: one Recharts/shadcn-style attendance-over-time chart derived from the selected
+exam's saved attendance timestamps, with honest empty/offline/illustration states. Do not
+infer absent students from the full local gallery or treat unknown tracks as unique people.

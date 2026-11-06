@@ -158,3 +158,11 @@ live polling, explicit illustration mode and offline safeguards. The dashboard a
 the two agreed index display rules even against old/stale API responses; CSC/24 always
 displays level 300 without changing the stored level. All other year codes keep supplied
 levels. Phone enrollment and backend recognition behavior are unchanged by this redesign.
+
+### Radix/teal iterative design review
+
+Iteration 1 only: installed actual Radix Themes, root Theme and layered styles; native
+Radix heading/statistic cards; applied the user's supplied seven-colour teal palette to
+shared semantic tokens and sidebar. Layout, controls and recognition behavior preserved.
+Await visual review before further layout/component migration or charts. The next proposed
+increment is a single attendance-over-time chart using saved records, not synthetic trends.

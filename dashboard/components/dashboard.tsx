@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import { Card as ThemeCard, Heading, Text } from "@radix-ui/themes";
 import {
   Activity,
   ArrowDownToLine,
@@ -254,7 +255,7 @@ export function Dashboard() {
       )}
       <aside
         aria-label="Workspace navigation"
-        className={`${navOpen ? "flex" : "hidden"} fixed inset-y-0 left-0 z-40 w-52 flex-col border-r bg-neutral-50 md:flex`}
+        className={`${navOpen ? "flex" : "hidden"} palette-sidebar fixed inset-y-0 left-0 z-40 w-52 flex-col border-r md:flex`}
       >
         <a
           href="#overview"
@@ -291,7 +292,8 @@ export function Dashboard() {
                     setNavOpen(false);
                     setSection(String(href));
                   }}
-                  className={`flex items-center gap-2.5 rounded-md px-2.5 py-2 text-xs ${section === href ? "bg-neutral-200/65 font-medium" : "text-muted-foreground hover:bg-neutral-100 hover:text-foreground"}`}
+                  aria-current={section === href ? "location" : undefined}
+                  className="palette-nav-link flex items-center gap-2.5 rounded-md px-2.5 py-2 text-xs font-medium"
                 >
                   <NavIcon className="size-4" />
                   {String(label)}
@@ -372,9 +374,9 @@ export function Dashboard() {
         >
           <div className="flex flex-wrap items-start justify-between gap-4">
             <div>
-              <h1 className="text-2xl font-semibold tracking-tight">
+              <Heading as="h1" size="6" weight="medium">
                 Attendance overview
-              </h1>
+              </Heading>
               <p className="mt-1.5 text-sm text-muted-foreground">
                 Recognition session and saved examination records.
               </p>
@@ -455,7 +457,7 @@ export function Dashboard() {
           )}
           <Card className="gap-0 overflow-hidden py-0 shadow-none">
             <CardContent className="p-0">
-              <div className="flex flex-wrap items-center justify-between gap-4 border-b px-5 py-4">
+              <div className="palette-exam-heading flex flex-wrap items-center justify-between gap-4 border-b px-5 py-4">
                 <div className="flex min-w-0 items-center gap-3">
                   <Badge
                     variant="secondary"
@@ -516,19 +518,28 @@ export function Dashboard() {
             className="grid grid-cols-2 gap-3 lg:grid-cols-4"
           >
             {metrics.map((metric) => (
-              <Card key={metric.label} className="gap-0 py-0 shadow-none">
-                <CardContent className="p-4 lg:p-5">
-                  <h2 className="text-xs font-medium text-muted-foreground">
-                    {metric.label}
-                  </h2>
-                  <p className="mt-3 text-3xl font-semibold tracking-tight tabular-nums">
-                    {metric.value}
-                  </p>
-                  <p className="mt-2 text-[11px] leading-4 text-muted-foreground">
-                    {metric.note}
-                  </p>
-                </CardContent>
-              </Card>
+              <ThemeCard
+                key={metric.label}
+                size="3"
+                variant="surface"
+                className="palette-stat"
+              >
+                <Text as="p" size="2" weight="medium" color="gray">
+                  {metric.label}
+                </Text>
+                <Heading
+                  as="h2"
+                  size="7"
+                  weight="medium"
+                  mt="3"
+                  className="tabular-nums"
+                >
+                  {metric.value}
+                </Heading>
+                <Text as="p" size="1" color="gray" mt="2">
+                  {metric.note}
+                </Text>
+              </ThemeCard>
             ))}
           </section>
           <div className="grid min-w-0 items-start gap-5 xl:grid-cols-[minmax(0,1fr)_290px]">
