@@ -149,6 +149,18 @@ def sync_submissions(
     return report
 
 
+def print_sync_summary(report):
+    """Use portable status labels: Windows cp1252 cannot encode check/cross glyphs."""
+    print(f"\nDone: {len(report.synced)} synced, {len(report.failed)} failed.")
+    for label in report.synced:
+        print(f"  [OK] {label}")
+    for label, reason in report.failed:
+        print(f"  [FAILED] {label}: {reason}")
+    if report.failed:
+        print("\nFailed submissions stay in the inbox as 'failed'. Ask those members to re-submit,")
+        print("or inspect the reason above. Re-running this command is safe.")
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument("--url", default=SUPABASE_URL, help="Supabase project URL (or SUPABASE_URL env)")
@@ -187,14 +199,7 @@ def main() -> None:
             session, embedder, inbox, default_exam=args.exam, keep_photos=args.keep_photos, limit=args.limit
         )
 
-    print(f"\nDone: {len(report.synced)} synced, {len(report.failed)} failed.")
-    for label in report.synced:
-        print(f"  ✓ {label}")
-    for label, reason in report.failed:
-        print(f"  ✗ {label}: {reason}")
-    if report.failed:
-        print("\nFailed submissions stay in the inbox as 'failed'. Ask those members to re-submit,")
-        print("or inspect the reason above. Re-running this command is safe.")
+    print_sync_summary(report)
 
 
 if __name__ == "__main__":
