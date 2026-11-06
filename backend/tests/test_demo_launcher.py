@@ -51,3 +51,13 @@ def test_stop_contract_uses_identity_and_owned_trees_not_global_image_kills():
     assert "taskkill" not in contents.lower()
     assert "Threading.Mutex" in contents
     assert ".demo-runtime/" in (ROOT / ".gitignore").read_text()
+
+
+def test_desktop_prepare_explicitly_installs_pinned_electron_runtime():
+    contents = (ROOT / "start-demo.ps1").read_text()
+    prepare = contents.split("        if ($Desktop) {", 1)[1].split("        Write-Json @{ fingerprint", 1)[0]
+    assert "& $npm ci '--include=dev'" in prepare
+    assert "& $node 'node_modules/electron/install.js'" in prepare
+    assert prepare.index("node_modules/electron/install.js") < prepare.index("node_modules/electron/dist/electron.exe")
+    assert "Electron runtime download failed" in prepare
+    assert "npx electron" not in prepare

@@ -53,7 +53,9 @@ Python/Node processes. Stop Demo remains the manual clickable recovery path.
 
 ## Development checks
 
-`npm ci` in this folder downloads the Electron binary for the current platform. `npm test`
+`npm ci` in this folder installs the pinned JavaScript package. Electron 45 requires an
+explicit `node node_modules/electron/install.js` to download/extract its runtime;
+**Prepare Desktop App.cmd** runs both steps automatically. `npm test`
 runs dependency-free Node lifecycle/security regression tests; it does not launch Electron.
 The Linux sandbox validated these tests, dependency audit, JavaScript syntax and PowerShell
 grammar, but **cannot validate Win32 native windows, shortcuts, shutdown or physical DroidCam**.

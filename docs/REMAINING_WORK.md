@@ -255,3 +255,9 @@ stopping; slow active tasks keep the app open rather than forcing termination. N
 camera windows and manual DroidCam connection are unchanged. Linux lifecycle tests/syntax,
 PowerShell grammar and npm audit can run here; actual Windows desktop/shortcut/CSV/exit/offline
 smoke tests remain user-side.
+
+### Electron preparation correction
+User-side preparation showed npm ci succeeding without electron.exe. Electron 45's package
+has no automatic postinstall download; added explicit execution of its pinned install.js
+before checking the executable. Previous skip-scripts error attribution was incorrect.
+Added a static regression test; actual Windows runtime download still requires user retry.

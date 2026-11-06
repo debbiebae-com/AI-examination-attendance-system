@@ -211,7 +211,12 @@ try {
             try {
                 & $npm ci '--include=dev'
                 if ($LASTEXITCODE -ne 0) { throw 'Electron preparation failed. Retry Prepare Desktop App.cmd while online.' }
-                if (-not (Test-Path -LiteralPath 'node_modules/electron/dist/electron.exe')) { throw 'Electron executable is missing. Do not skip npm install scripts during desktop preparation.' }
+                # Electron 45 exposes an explicit installer; npm ci alone installs only
+                # its JS package. Run the pinned package's installer, never an npx latest.
+                Write-Host 'Downloading/verifying the pinned Electron application runtime...'
+                & $node 'node_modules/electron/install.js'
+                if ($LASTEXITCODE -ne 0) { throw 'Electron runtime download failed. Check internet access, then retry Prepare Desktop App.cmd.' }
+                if (-not (Test-Path -LiteralPath 'node_modules/electron/dist/electron.exe')) { throw 'Electron runtime is still missing. Check download/security-software messages, then retry Prepare Desktop App.cmd.' }
             } finally { Pop-Location }
         }
         Write-Json @{ fingerprint = Get-SourceFingerprint; build = (Get-Content -Raw -LiteralPath (Join-Path $dashboard '.next/BUILD_ID')).Trim(); prepared = (Get-Date).ToString('o') } $preparedPath
