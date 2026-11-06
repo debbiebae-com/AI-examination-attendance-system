@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { csv, visibleStudents, time, statusLabel, eventLabel } from "./data";
+import { academic, csv, visibleStudents, time, statusLabel, eventLabel } from "./data";
 import { demoFeed } from "./demo";
 
 describe("dashboard data", ()=>{
@@ -38,4 +38,18 @@ describe("dashboard data", ()=>{
     expect(statusLabel("stopped")).toBe("Session stopped");
     expect(eventLabel("not_eligible")).toBe("Attendance not recorded");
   });
+});
+
+
+it("uses presentation metadata without mutating the recorded level",()=>{
+ const student=demoFeed().students[0];
+ expect(student.level).toBe(200);
+ expect(academic(student).level).toBe(300);
+ expect(academic(student).department).toBe("Computer Science and Information Technology");
+ expect(visibleStudents(demoFeed(),"300")).toHaveLength(4);
+});
+it("falls back honestly when an older API supplies no presentation data",()=>{
+ const student={...demoFeed().students[0],presentation:undefined};
+ expect(academic(student).level).toBe(student.level);
+ expect(academic(student).department).toBeNull();
 });

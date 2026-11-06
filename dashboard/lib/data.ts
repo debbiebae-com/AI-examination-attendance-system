@@ -1,5 +1,6 @@
+export type AcademicDisplay = {department: string | null; programme: string | null; level: number | null; index_programme_code: string | null; index_year_code: string | null; department_source: string; level_source: string; is_demo_metadata: boolean};
 export type Exam = {id: number; course_code: string; course_title: string; hall: string; starts_at: string; ends_at: string};
-export type Student = {student_no: string; full_name: string; programme: string; level: number; has_photo: boolean; face_samples: number};
+export type Student = {student_no: string; full_name: string; programme: string; level: number; has_photo: boolean; face_samples: number; presentation?: AcademicDisplay};
 export type Attendance = {student_no: string; full_name: string; recorded_at: string; confidence: number | null; source: string};
 export type LiveEvent = {id: number; at: string; kind: string; track_id?: number | null; student_no?: string | null; reasons?: string[]; similarity?: number};
 export type Session = {session_id: string | null; status: string; exam?: Exam | null; started_at?: string; updated_at?: string; error?: string | null; identified_count?: number; unidentified_now: number; visible_faces?: number; processed_fps?: number; processing_ms?: number; present_count: number; events: LiveEvent[]};
@@ -15,5 +16,11 @@ export function csv(records: Attendance[], exam?: Exam | null) {
 export function visibleStudents(feed: Feed, query: string) {
   const known = new Set([...feed.attendance.map(r=>r.student_no), ...feed.session.events.filter(e=>e.kind==="identified").map(e=>e.student_no)]);
   const recent = (id: string) => feed.session.events.filter(e=>e.student_no===id).at(-1)?.at || feed.attendance.find(r=>r.student_no===id)?.recorded_at || "";
-  return feed.students.filter(s=>known.has(s.student_no) && `${s.full_name} ${s.student_no} ${s.programme}`.toLowerCase().includes(query.toLowerCase())).sort((a,b)=>recent(b.student_no).localeCompare(recent(a.student_no)));
+  return feed.students.filter(s=>known.has(s.student_no) && `${s.full_name} ${s.student_no} ${s.programme} ${academic(s).department || ""} ${academic(s).level || ""}`.toLowerCase().includes(query.toLowerCase())).sort((a,b)=>recent(b.student_no).localeCompare(recent(a.student_no)));
+}
+
+// Real presentation mappings come from the backend, shared with the camera overlay.
+// An older API has no mapping: show stored details instead of guessing year progression.
+export function academic(student: Student) {
+ return student.presentation || {department:null,programme:student.programme,level:student.level,index_programme_code:null,index_year_code:null,department_source:"not_supplied",level_source:"local_record",is_demo_metadata:false};
 }

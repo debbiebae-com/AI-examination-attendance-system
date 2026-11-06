@@ -24,7 +24,9 @@ it("offers an explicit illustration, search, student details and exit",async()=>
   await user.click(screen.getByRole("button",{name:"View Kwame Mensah"}));
   const panel=screen.getByRole("dialog");
   expect(within(panel).getByText("PS/CSC/24/0016")).toBeInTheDocument();
-  expect(within(panel).getByText("Not supplied")).toBeInTheDocument();
+  expect(within(panel).getByText("Computer Science and Information Technology")).toBeInTheDocument();
+  expect(within(panel).getByText("Level 300")).toBeInTheDocument();
+  expect(within(panel).getByText(/These rules do not change student records/)).toBeInTheDocument();
   await user.keyboard("{Escape}");
   expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
   await user.click(screen.getByRole("button",{name:"Exit preview"}));

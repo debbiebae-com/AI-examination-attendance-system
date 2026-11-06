@@ -13,6 +13,7 @@ from app.config import CORS_ORIGINS, ENROLL_DEFAULT_EXAM, ENROLL_MODEL, FRONTEND
 from app.db import engine, get_session
 from app.control import router as control_router, control_key
 from app.live import LiveStore
+from app.presentation import academic_display
 from app.models import AttendanceRecord, Base, Exam, FaceEmbedding, Student
 from app.vision.web_enroll import decode_image, enroll_from_photos
 
@@ -132,6 +133,7 @@ def list_students(session: Session = Depends(get_session)) -> list[dict]:
             "suspended": s.suspended,
             "has_photo": s.photo_path is not None,
             "face_samples": sample_counts.get(s.id, 0),
+            "presentation": academic_display(s.student_no, s.programme, s.level),
         }
         for s in students
     ]

@@ -23,6 +23,7 @@ from sqlalchemy import select
 
 from app.attendance import NotEligible, mark_attendance
 from app.db import SessionLocal, engine
+from app.presentation import academic_display, camera_detail_lines
 from app.live import LivePublisher
 from app.models import Base, Exam, Student
 from app.vision.attendance_flow import CONFIRM_FRAMES, AttendanceDecider, FaceTracker
@@ -33,7 +34,7 @@ from app.vision.matcher import DEFAULT_MARGIN, DEFAULT_THRESHOLD
 
 FONT = cv2.FONT_HERSHEY_SIMPLEX
 WINDOW = "Live attendance (press q to stop)"
-MAX_EVENTS_SHOWN = 6
+MAX_EVENTS_SHOWN = 3
 
 
 def colour_for(label: str) -> tuple[int, int, int]:
@@ -85,7 +86,48 @@ def record(
     print(events[-1])
 
 
-def draw(image, faces: list[DetectedFace], ids: list[int | None], tracker: FaceTracker, decider: AttendanceDecider, names: dict[str, str], events: list[str], fps: float = 0.0) -> None:
+def wrap_overlay(text: str, max_width: int, scale: float = 0.43) -> list[str]:
+    """Fit long indices/departments; split even a single long word if necessary."""
+    lines, current = [], ""
+    for word in text.split():
+        candidate = f"{current} {word}".strip()
+        if cv2.getTextSize(candidate, FONT, scale, 1)[0][0] <= max_width:
+            current = candidate
+            continue
+        if current:
+            lines.append(current)
+            current = ""
+        for char in word:
+            if current and cv2.getTextSize(current + char, FONT, scale, 1)[0][0] > max_width:
+                lines.append(current)
+                current = ""
+            current += char
+    if current:
+        lines.append(current)
+    return lines
+
+
+def draw_face_card(image, lines, x1, y1, y2, colour):
+    height, width = image.shape[:2]
+    if width < 32 or height < 32:
+        return
+    card_width = min(300, width - 8)
+    wrapped = [part for line in lines for part in wrap_overlay(line, card_width - 16)]
+    # Small camera frames cannot show unlimited text; leave all rendered lines inside the image.
+    wrapped = wrapped[:max(1, (height - 16) // 18)]
+    card_height = len(wrapped) * 18 + 12
+    x = max(4, min(x1, width - card_width - 4))
+    preferred_y = y1 - card_height - 4 if y1 >= card_height + 4 else y2 + 4
+    y = max(4, min(preferred_y, height - card_height - 4))
+    region = image[y:y + card_height, x:x + card_width]
+    region[:] = (region.astype("float32") * 0.2).astype("uint8")
+    cv2.rectangle(image, (x, y), (x + card_width, y + card_height), colour, 1)
+    for index, text in enumerate(wrapped):
+        cv2.putText(image, text, (x + 8, y + 18 + index * 18), FONT, 0.43,
+                    colour if index == 0 else (235, 235, 235), 1, cv2.LINE_AA)
+
+
+def draw(image, faces: list[DetectedFace], ids: list[int | None], tracker: FaceTracker, decider: AttendanceDecider, names: dict[str, str], events: list[str], fps: float = 0.0, academic: dict[str, dict] | None = None, exam_info: str = "") -> None:
     for face, tid in zip(faces, ids):
         if tid is None:
             continue
@@ -95,9 +137,16 @@ def draw(image, faces: list[DetectedFace], ids: list[int | None], tracker: FaceT
         label = f"{who}: {track.label}" if who else track.label
         colour = colour_for(track.label)
         cv2.rectangle(image, (x1, y1), (x2, y2), colour, 2)
-        cv2.putText(image, label, (x1, max(20, y1 - 10)), FONT, 0.6, colour, 2)
+        lines = [label]
+        # Academic data is only attached after identity confirmation, not while
+        # the candidate is still being checked or the face is unknown.
+        if track.marked and track.candidate:
+            lines += camera_detail_lines(track.candidate, (academic or {}).get(track.candidate))
+        draw_face_card(image, lines, x1, y1, y2, colour)
 
     height, width = image.shape[:2]
+    for index, line in enumerate(wrap_overlay(exam_info, max(40, width - 145))[:2]):
+        cv2.putText(image, line, (10, 22 + index * 18), FONT, 0.43, (255, 255, 255), 1, cv2.LINE_AA)
     cv2.putText(image, f"{fps:4.1f} fps", (width - 110, 30), FONT, 0.6, (200, 200, 200), 1, cv2.LINE_AA)
     for i, line in enumerate(events[-MAX_EVENTS_SHOWN:]):
         cv2.putText(image, line, (20, height - 20 - 26 * (MAX_EVENTS_SHOWN - 1 - i)), FONT, 0.55, (255, 255, 255), 2)
@@ -142,8 +191,11 @@ def main() -> None:
             raise SystemExit(f"No exam with course code {args.exam}")
         exam_id = exam.id
         exam_title = exam.course_title
+        exam_info = f"{exam.course_code} | {exam.course_title} | {exam.hall}"
         matcher = load_matcher(session, threshold=args.threshold, margin=args.margin)
-        names = {s.student_no: s.full_name for s in session.scalars(select(Student))}
+        students = session.scalars(select(Student)).all()
+        names = {s.student_no: s.full_name for s in students}
+        academic = {s.student_no: academic_display(s.student_no, s.programme, s.level) for s in students}
 
     if len(matcher) == 0:
         raise SystemExit("No enrolled faces found. Run the capture or photo enrollment first.")
@@ -225,7 +277,7 @@ def main() -> None:
                 del events[:-MAX_EVENTS_SHOWN]
                 live.frame(visible_faces=len(faces), states=states, fps=fps_meter.fps,
                            processing_ms=(perf_counter() - began) * 1000)
-                draw(image, faces, ids, tracker, decider, names, events, fps_meter.fps)
+                draw(image, faces, ids, tracker, decider, names, events, fps_meter.fps, academic, exam_info)
                 cv2.imshow(WINDOW, image)
                 fps_meter.tick()
                 if cv2.waitKey(1) & 0xFF == ord("q"):

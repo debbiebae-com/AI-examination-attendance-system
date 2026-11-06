@@ -140,3 +140,12 @@ forward cannot satisfy left/right steps; invalid/extra faces block saving and mo
 has no timed fallback. Payload/sync are unchanged. This remains browser guidance, not robust
 liveness or trusted server-side pose validation. See frontend/README.md for thresholds,
 compatibility, tests, asset provenance and actual-phone test requirements.
+
+## Presentation enrichment
+
+Added an explicit display-only CSC department mapping and 24 -> level 300 rule in
+`app.presentation`, shared by the students API and camera overlay. Dashboard profiles,
+student rows and a latest-record card show the separate display data. Original student
+records and eligibility stay unchanged; unspecified year codes are not extrapolated.
+Further proposed visual additions require user agreement (portraits, fullscreen presentation,
+venue branding and session graphics); they are not implemented by this enrichment.

@@ -150,3 +150,24 @@ before shutting down the API; an unexpected API crash can orphan a child process
 that camera with q before restarting. Sync is not forcibly cancelled mid-import; failures
 and partial sync details appear in its output. Async job metadata is in memory, not a job
 queue persisted across API restarts. Do not use `uvicorn --reload` during the demonstration.
+
+## Presentation academic details
+
+For this demonstration, the backend display mapper recognizes indices in the form
+`PS/CSC/24/0016` (case-insensitive):
+- Programme code **CSC** displays department **Computer Science and Information Technology**.
+- Index year code **24** displays **Level 300**, independent of the recorded level.
+- Other year codes are not extrapolated. They retain the locally stored level.
+- Unrecognized department codes remain not supplied. Programme text remains locally stored.
+
+The API retains original `programme`/`level` and adds a separate `presentation` object.
+The student list, latest-recognition/saved-record card and details panel use those display
+fields. The details panel explains the assumptions; these are not verified university data
+and never change recognition, registration or eligibility. Older APIs without the added
+object fall back to recorded values instead of guessing. Layout-preview fixtures are fictional.
+
+The OpenCV scan window uses the same backend mapper: confirmed identities show name/status,
+index, level, department and a presentation-metadata notice. Unknown/checking faces do not get
+academic identity details. The top banner shows the exam/venue, with processed FPS separate.
+Cards wrap long lines to fit the frame. Crowded/occluded face cards can still overlap; real
+multi-person camera testing is necessary before the presentation.
