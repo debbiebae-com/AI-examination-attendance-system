@@ -168,3 +168,19 @@ it("offers Windows DroidCam backends and sends the explicitly chosen backend", a
     body: { camera: 1, source: "droidcam", capture_backend: "msmf" },
   });
 });
+
+it("keeps Windows options selectable if an older backend omits its platform", async () => {
+  const user = userEvent.setup();
+  render(<DemoControls onChanged={() => {}} />);
+  await user.click(screen.getByRole("button", { name: "Demo controls" }));
+  await screen.findByText("Ama Demo");
+  expect(screen.getByText(/Backend platform:/)).toHaveTextContent(
+    "not reported",
+  );
+  const select = screen.getByRole("combobox", { name: "Capture backend" });
+  await user.selectOptions(select, "dshow");
+  expect(select).toHaveValue("dshow");
+  await user.selectOptions(select, "msmf");
+  expect(select).toHaveValue("msmf");
+  expect(screen.getByRole("option", { name: /DirectShow/ })).not.toBeDisabled();
+});

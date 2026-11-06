@@ -301,3 +301,35 @@ one at a time; camera numbers can differ by backend. A readable green frame can 
 the frame-read check, so visual confirmation is essential. Try other indices if necessary.
 Current phone capture leaves resolution/FPS negotiation to DroidCam rather than forcing
 720p/30. Physical Windows/DroidCam verification remains required.
+
+### Diagnose separately from the dashboard
+
+The backend selector now disables Windows options only for an explicitly non-Windows API
+host, not a missing `platform` field. Missing platform is shown as an old/restart-needed
+API warning; an older API may ignore new fields, so restart it before a camera test.
+Running tasks still lock source settings intentionally. The API enforces platform support.
+
+For evidence rather than trial-and-error, stop recognition/checks, keep DroidCam connected,
+and run from a separate PowerShell window at the repository root:
+
+```powershell
+git pull --ff-only origin arena/6093045b-ai-examination-attendance-syst
+cd backend
+uv run --frozen --extra vision python -m app.vision.camera_diagnostics --indices 0 1 2 --preview 2>&1 | Tee-Object -FilePath camera-diagnostics.txt
+```
+
+On Windows this compares Automatic, DirectShow and Media Foundation for each index, each
+in a fresh subprocess with a 20-second limit. It does not load face models, access the DB,
+record attendance, change resolution/FPS or save images. The brief previews need visual
+confirmation. Output includes Python bitness/path, installed OpenCV distributions, actual
+capture backend, FOURCC, reported conversion/resolution/FPS, frame shape/dtype, read count,
+BGR means/std, green dominance, first/last differences and driver errors/timeouts.
+Multiple OpenCV distributions are reported as evidence, not automatically removed.
+
+A green scene or stationary phone may produce green dominance/low movement naturally;
+these are clues, not an automatic failure verdict. `frames_received` is not device identity.
+A targeted follow-up can use `--indices 2 --backends dshow --convert-rgb on` only after
+reviewing the baseline. This changes only the diagnostic probe, not recognition settings.
+Do not run diagnostics concurrently with recognition or other apps consuming the virtual
+webcam. Share the resulting text and identify which preview was correct/green, not photos,
+.env files, control keys or service credentials. Windows driver testing is still user-side.

@@ -342,14 +342,34 @@ export function DemoControls({
                 className="h-10 w-full rounded-md border bg-background px-3 text-xs"
               >
                 <option value="auto">Automatic (existing default)</option>
-                <option value="dshow" disabled={job?.platform !== "win32"}>
+                <option
+                  value="dshow"
+                  disabled={!!job?.platform && job.platform !== "win32"}
+                >
                   DirectShow — Windows / DroidCam
                 </option>
-                <option value="msmf" disabled={job?.platform !== "win32"}>
+                <option
+                  value="msmf"
+                  disabled={!!job?.platform && job.platform !== "win32"}
+                >
                   Media Foundation — Windows alternative
                 </option>
               </select>
             </label>
+            <p className="mt-2 text-[11px] leading-5 text-muted-foreground">
+              Backend platform:{" "}
+              {job?.platform ||
+                "not reported — restart the updated backend API"}
+              .{" "}
+              {job?.platform && job.platform !== "win32"
+                ? "Windows capture backends are unavailable on this backend host."
+                : !job?.platform
+                  ? "Windows options are selectable, but the API still validates support. An old API may ignore these settings; restart it before checking."
+                  : "DirectShow and Media Foundation are available to select."}{" "}
+              {locked
+                ? "Source settings are locked until the current task finishes."
+                : ""}
+            </p>
             <p className="mt-2 text-[11px] leading-5 text-muted-foreground">
               Camera numbers are local to this PC/backend and can change after
               reconnecting. If the wrong feed opens, stop it and try 0, 1, 2…;
