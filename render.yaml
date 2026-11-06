@@ -1,0 +1,22 @@
+# Render Blueprint: one free Docker web service serving the API + enrollment web app.
+# Deploy via Render dashboard -> New -> Blueprint, then set DATABASE_URL to your Supabase string.
+services:
+  - type: web
+    name: exam-attendance
+    runtime: docker
+    plan: free
+    dockerfilePath: ./Dockerfile
+    healthCheckPath: /health
+    envVars:
+      # 512 MB free instance -> use the smaller face pack. Attendance must use --model buffalo_s too.
+      - key: ENROLL_MODEL
+        value: buffalo_s
+      # Auto-register every web enrollee for the demo exam.
+      - key: ENROLL_DEFAULT_EXAM
+        value: CS101
+      - key: CORS_ORIGINS
+        value: "*"
+      # Set this in the Render dashboard to your Supabase "Session pooler" string,
+      # with the scheme changed to postgresql+psycopg://  (kept secret, not committed).
+      - key: DATABASE_URL
+        sync: false

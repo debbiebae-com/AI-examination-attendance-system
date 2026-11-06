@@ -1,0 +1,13 @@
+.git
+**/__pycache__
+**/.pytest_cache
+**/.venv
+**/node_modules
+frontend/dist
+frontend/.vite
+frontend/.env
+frontend/.env.*
+!frontend/.env.example
+backend/data/*.db
+backend/data/probes
+*.onnx

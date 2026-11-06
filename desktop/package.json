@@ -1,0 +1,15 @@
+{
+  "name": "examlens-desktop",
+  "version": "0.1.0",
+  "private": true,
+  "description": "ExamLens desktop shell for the prepared Windows presentation PC",
+  "main": "main.cjs",
+  "scripts": {
+    "start": "electron .",
+    "test": "node --test test/*.test.cjs"
+  },
+  "devDependencies": {
+    "electron": "45.2.3"
+  },
+  "engines": { "node": ">=22.12.0" }
+}

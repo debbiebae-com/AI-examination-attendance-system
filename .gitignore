@@ -1,0 +1,44 @@
+# Python
+__pycache__/
+*.pyc
+.venv/
+.pytest_cache/
+
+# Frontend
+node_modules/
+.next/
+frontend/dist/
+frontend/.vite/
+
+# Local databases and generated model files
+*.db
+*.onnx
+backend/data/*.db
+
+# Secrets and local env
+.env
+.env.*
+!.env.example
+!frontend/.env.example
+
+# Real probe photos for accuracy tests (biometric data; keep local)
+backend/data/probes/
+
+# Next.js dashboard generated output
+*.tsbuildinfo
+dashboard/next-env.d.ts
+
+# Consented validation videos, annotations and identity-bearing reports
+backend/data/validation/
+
+# PC-only dashboard control secret and process signal
+backend/data/control.key
+backend/data/camera.stop
+
+!backend/.env.example
+
+# Generated MediaPipe runtime files (copied from locked npm package at build)
+frontend/public/pose/wasm/
+
+# Private Windows presentation launcher state and server logs
+.demo-runtime/

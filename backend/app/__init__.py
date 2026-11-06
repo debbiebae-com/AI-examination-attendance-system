@@ -1,0 +1,1 @@
+"""Examination attendance backend."""
