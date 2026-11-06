@@ -149,3 +149,12 @@ student rows and a latest-record card show the separate display data. Original s
 records and eligibility stay unchanged; unspecified year codes are not extrapolated.
 Further proposed visual additions require user agreement (portraits, fullscreen presentation,
 venue branding and session graphics); they are not implemented by this enrichment.
+
+### Dashboard redesign follow-up
+
+Replaced the green-accented workspace with the configured shadcn New York / Neutral
+theme, semantic tokens, Table and keyboard-accessible Tabs. Preserved local controls,
+live polling, explicit illustration mode and offline safeguards. The dashboard applies
+the two agreed index display rules even against old/stale API responses; CSC/24 always
+displays level 300 without changing the stored level. All other year codes keep supplied
+levels. Phone enrollment and backend recognition behavior are unchanged by this redesign.

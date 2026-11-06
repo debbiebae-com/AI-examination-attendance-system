@@ -65,11 +65,12 @@ an alert, hide numeric metrics and disable exports; retained table rows are expl
 - Recent activity uses the backend's bounded 100-event snapshot (30 displayed at once).
 - GMT times interpret the database's timezone-naive timestamps as UTC.
 
-Student details use actual locally supplied enrollment fields. They are not verified
-university records. Department is shown as not supplied; no department is invented.
+Student details use locally supplied enrollment fields plus the explicitly agreed
+presentation index rules below. They are not verified university records. Other
+departments remain not supplied.
 Portraits are not exposed by the current API, so initials are shown with an explicit
 placeholder notice. Camera video remains in the OpenCV window; the dashboard does not
-open a second camera. Consent-based portraits and richer demo metadata remain follow-up work.
+open a second camera. Consent-based portraits remain follow-up work.
 
 ## Layout preview
 
@@ -163,11 +164,29 @@ For this demonstration, the backend display mapper recognizes indices in the for
 The API retains original `programme`/`level` and adds a separate `presentation` object.
 The student list, latest-recognition/saved-record card and details panel use those display
 fields. The details panel explains the assumptions; these are not verified university data
-and never change recognition, registration or eligibility. Older APIs without the added
-object fall back to recorded values instead of guessing. Layout-preview fixtures are fictional.
+and never change recognition, registration or eligibility. The dashboard also enforces these
+two display rules in `lib/data.ts`: CSC and year code 24 take priority even when an older API
+omits `presentation` or returns a stale display level. Other index years retain supplied values;
+no automatic year progression is inferred. Layout-preview fixtures are fictional.
 
 The OpenCV scan window uses the same backend mapper: confirmed identities show name/status,
 index, level, department and a presentation-metadata notice. Unknown/checking faces do not get
 academic identity details. The top banner shows the exam/venue, with processed FPS separate.
 Cards wrap long lines to fit the frame. Crowded/occluded face cards can still overlap; real
 multi-person camera testing is necessary before the presentation.
+
+## shadcn Neutral redesign
+
+The dashboard uses the configured shadcn **New York / Neutral** theme and CSS variables,
+without a green primary override. Geist is bundled locally. Shared shadcn-style Card,
+Button, Input, Badge, Table and Radix Tabs primitives provide the workspace layout:
+compact sidebar, examination summary, measured counts, searchable student records,
+latest-student panel, activity log and neutral detail/control panels. Green is reserved
+for successful/active statuses; amber/red indicate attention/errors. No fabricated trends,
+percentages or decorative charts are added. The mobile sidebar is toggleable; record
+tables scroll horizontally without widening the page. Filters support keyboard navigation.
+Camera/sync/registration/removal controls keep their existing behavior and safeguards.
+
+Regression tests specifically assert `PS/CSC/24/0016` -> **Level 300** in both the table
+and profile against an older API with stored level 100 and no display metadata, plus
+stale display overrides, unspecified year-code fallback and non-mutating behavior.

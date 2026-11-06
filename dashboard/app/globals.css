@@ -5,8 +5,8 @@
 @custom-variant dark (&:is(.dark *));
 
 :root {
-  --radius: 0.625rem;
-  --background: oklch(0.985 0 0);
+  --radius: 0.5rem;
+  --background: oklch(1 0 0);
   --foreground: oklch(0.145 0 0);
   --card: oklch(1 0 0);
   --card-foreground: oklch(0.145 0 0);
@@ -69,9 +69,6 @@
   }
 }
 
-:root { --radius: .65rem; --primary: #065f46; --ring: #10b981; }
-html { scroll-behavior: smooth; scroll-padding-top: 24px; }
-.nav-link { display:flex; align-items:center; gap:12px; padding:12px; margin-top:5px; font-size:12px; color:#7c8796; border-radius:8px; transition:background .15s,color .15s; }
-.nav-link:hover { background:#f8faf9; color:#065f46; }
-button, a, input { -webkit-tap-highlight-color:transparent; }
-a:focus-visible, button:focus-visible { outline:2px solid #059669; outline-offset:3px; }
+html { scroll-behavior: smooth; scroll-padding-top: 80px; }
+button, a, input { -webkit-tap-highlight-color: transparent; }
+a:focus-visible { outline: 2px solid var(--ring); outline-offset: 3px; }

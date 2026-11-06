@@ -1,24 +1,95 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { Activity, ArrowDownToLine, ArrowRight, BookOpen, Check, CheckCheck, ChevronRight, CircleHelp, Clock3, GraduationCap, LayoutDashboard, MapPin, Radio, RefreshCw, ScanFace, Search, ShieldCheck, Users, UserRoundCheck, UserRoundSearch, WifiOff } from "lucide-react";
+import {
+  Activity,
+  ArrowDownToLine,
+  ArrowUpRight,
+  BookOpen,
+  Check,
+  ChevronRight,
+  CircleHelp,
+  Clock3,
+  Database,
+  LayoutDashboard,
+  Menu,
+  Radio,
+  RefreshCw,
+  ScanFace,
+  Search,
+  Users,
+  WifiOff,
+  X,
+} from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
-import { Dialog, DialogContent, DialogDescription, DialogTitle } from "@/components/ui/dialog";
-import { academic, csv, eventLabel, initials, statusLabel, time, visibleStudents, type Feed, type Student } from "@/lib/data";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import {
+  Table,
+  TableHeader,
+  TableBody,
+  TableRow,
+  TableHead,
+  TableCell,
+} from "@/components/ui/table";
+import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
+import {
+  academic,
+  csv,
+  eventLabel,
+  initials,
+  statusLabel,
+  time,
+  visibleStudents,
+  type Feed,
+  type Student,
+} from "@/lib/data";
 import { DemoControls } from "@/components/demo-controls";
 import { demoFeed } from "@/lib/demo";
 
 async function get<T>(path: string, signal: AbortSignal): Promise<T> {
   const response = await fetch(`/api/${path}`, { signal, cache: "no-store" });
-  if (!response.ok) throw new Error(response.status === 503 ? "Local API is offline. Start the backend on this PC to connect." : `Could not load attendance data (${response.status}).`);
+  if (!response.ok)
+    throw new Error(
+      response.status === 503
+        ? "Local API is offline. Start the backend on this PC to connect."
+        : `Could not load attendance data (${response.status}).`,
+    );
   return response.json();
 }
 
-function Avatar({name,large=false}: {name:string;large?:boolean}) {
-  return <span className={`inline-flex shrink-0 items-center justify-center rounded-full border border-emerald-100 bg-emerald-50 font-medium text-emerald-800 ${large?"size-20 text-2xl":"size-10 text-xs"}`} aria-label="Initials placeholder — no portrait available">{initials(name)}</span>;
+function Avatar({ name, large = false }: { name: string; large?: boolean }) {
+  return (
+    <span
+      className={`inline-flex shrink-0 items-center justify-center rounded-md border bg-muted/50 font-medium text-muted-foreground ${large ? "size-12 text-base" : "size-8 text-[11px]"}`}
+      aria-label="Initials placeholder — no portrait available"
+    >
+      {initials(name)}
+    </span>
+  );
+}
+
+function AttendanceBadge({ present }: { present: boolean }) {
+  return (
+    <Badge
+      variant="outline"
+      className={
+        present
+          ? "gap-1.5 rounded-md border-emerald-200 bg-emerald-50 text-emerald-800"
+          : "gap-1.5 rounded-md text-muted-foreground"
+      }
+    >
+      {present ? <Check className="size-3" /> : <Clock3 className="size-3" />}
+      {present ? "Present" : "Not recorded"}
+    </Badge>
+  );
 }
 
 export function Dashboard() {
@@ -29,94 +100,855 @@ export function Dashboard() {
   const [retry, setRetry] = useState(0);
   const [query, setQuery] = useState("");
   const [selected, setSelected] = useState<Student | null>(null);
-  const [tab, setTab] = useState<"all"|"present">("all");
+  const [tab, setTab] = useState<"all" | "present">("all");
   const [help, setHelp] = useState(false);
+  const [section, setSection] = useState("#overview");
+  const [navOpen, setNavOpen] = useState(false);
   const previousSession = useRef<string | null | undefined>(undefined);
   useEffect(() => {
-    if (illustration) { setFeed(demoFeed()); setError(""); setLoading(false); return; }
+    if (illustration) {
+      setFeed(demoFeed());
+      setError("");
+      setLoading(false);
+      return;
+    }
     let disposed = false;
     let timer: ReturnType<typeof setTimeout>;
     let controller: AbortController;
-    setLoading(true); setFeed(null); setSelected(null);
+    setLoading(true);
+    setFeed(null);
+    setSelected(null);
     async function poll() {
       controller = new AbortController();
-      const timeout = setTimeout(()=>controller.abort(), 8000);
+      const timeout = setTimeout(() => controller.abort(), 8000);
       try {
-        const [session,students] = await Promise.all([
+        const [session, students] = await Promise.all([
           get<Feed["session"]>("live/session", controller.signal),
           get<Student[]>("students", controller.signal),
         ]);
-        const attendance = session.exam ? await get<Feed["attendance"]>(`exams/${session.exam.id}/attendance`, controller.signal) : [];
+        const attendance = session.exam
+          ? await get<Feed["attendance"]>(
+              `exams/${session.exam.id}/attendance`,
+              controller.signal,
+            )
+          : [];
         if (!disposed) {
           if (previousSession.current !== session.session_id) setSelected(null);
           previousSession.current = session.session_id;
-          setFeed({session,students,attendance}); setError("");
+          setFeed({ session, students, attendance });
+          setError("");
         }
       } catch (e) {
-        if (!disposed) setError(e instanceof Error && e.name!=="AbortError" ? e.message : "Connection timed out. Retrying the local API…");
+        if (!disposed)
+          setError(
+            e instanceof Error && e.name !== "AbortError"
+              ? e.message
+              : "Connection timed out. Retrying the local API…",
+          );
       } finally {
         clearTimeout(timeout);
-        if (!disposed) {setLoading(false); timer=setTimeout(poll, 2000);}
+        if (!disposed) {
+          setLoading(false);
+          timer = setTimeout(poll, 2000);
+        }
       }
     }
     poll();
-    return ()=>{disposed=true; clearTimeout(timer); controller?.abort();};
-  }, [illustration,retry]);
+    return () => {
+      disposed = true;
+      clearTimeout(timer);
+      controller?.abort();
+    };
+  }, [illustration, retry]);
 
   const live = feed?.session;
   const exam = live?.exam;
   const active = !error && live?.status === "running";
-  const students = feed ? visibleStudents(feed,query).filter(s=>tab!=="present" || feed.attendance.some(a=>a.student_no===s.student_no)) : [];
-  const nameFor = (id?:string|null)=>feed?.students.find(s=>s.student_no===id)?.full_name || id;
+  const students = feed
+    ? visibleStudents(feed, query).filter(
+        (s) =>
+          tab !== "present" ||
+          feed.attendance.some((a) => a.student_no === s.student_no),
+      )
+    : [];
+  const nameFor = (id?: string | null) =>
+    feed?.students.find((s) => s.student_no === id)?.full_name || id;
   const latestStudent = feed ? visibleStudents(feed, "")[0] : null;
   const latestAcademic = latestStudent ? academic(latestStudent) : null;
   const selectedAcademic = selected ? academic(selected) : null;
-  const selectedRecord = feed?.attendance.find(a=>a.student_no===selected?.student_no);
-  const selectedRecognition = live?.events.filter(e=>e.student_no===selected?.student_no && e.kind==="identified").at(-1);
+  const selectedRecord = feed?.attendance.find(
+    (a) => a.student_no === selected?.student_no,
+  );
+  const selectedRecognition = live?.events
+    .filter(
+      (e) => e.student_no === selected?.student_no && e.kind === "identified",
+    )
+    .at(-1);
   function exportAttendance() {
     if (!feed) return;
-    const url = URL.createObjectURL(new Blob(["\uFEFF"+csv(feed.attendance,exam)],{type:"text/csv;charset=utf-8;"}));
-    const link=document.createElement("a"); link.href=url; link.download=`${illustration?"ILLUSTRATION-":""}attendance-${exam?.course_code || "exam"}.csv`; link.click(); URL.revokeObjectURL(url);
+    const url = URL.createObjectURL(
+      new Blob(["\uFEFF" + csv(feed.attendance, exam)], {
+        type: "text/csv;charset=utf-8;",
+      }),
+    );
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = `${illustration ? "ILLUSTRATION-" : ""}attendance-${exam?.course_code || "exam"}.csv`;
+    link.click();
+    URL.revokeObjectURL(url);
   }
 
-  return <div className="min-h-screen bg-[#f7f9f8] text-slate-900">
-    <aside className="fixed inset-y-0 left-0 z-20 hidden w-[232px] flex-col border-r border-slate-200/80 bg-white xl:flex">
-      <a href="/" className="flex h-[88px] items-center gap-2.5 px-7"><span className="grid size-9 place-items-center rounded-xl bg-emerald-800 text-white"><ScanFace className="size-6"/></span><span className="text-xl font-semibold tracking-[-.7px]">ExamLens<span className="text-emerald-700">.</span></span></a>
-      <div className="px-4 pt-7"><p className="mb-3 px-3 text-[10px] font-semibold tracking-[.18em] text-slate-400">WORKSPACE</p><a href="#overview" className="flex items-center gap-3 rounded-lg bg-emerald-50 px-3 py-3 text-sm font-medium text-emerald-900"><LayoutDashboard className="size-[18px]"/>Live dashboard<span className="ml-auto size-1.5 rounded-full bg-emerald-600"/></a><a href="#students" className="nav-link"><Users className="size-[18px]"/>Attendance</a><a href="#activity" className="nav-link"><Activity className="size-[18px]"/>Recognition activity</a></div>
-      <div className="mt-auto p-5"><div className="rounded-xl border border-emerald-100 bg-[#f5faf7] p-4"><ShieldCheck className="mb-3 size-5 text-emerald-700"/><p className="text-xs font-semibold">Local-first. Privacy-first.</p><p className="mt-1.5 text-[11px] leading-5 text-slate-500">Recognition stays on your PC. No cloud connection required.</p></div><button onClick={()=>setHelp(true)} className="nav-link mt-5 w-full"><CircleHelp className="size-[18px]"/>Demo guide<ArrowRight className="ml-auto size-3.5"/></button><div className="mt-5 flex items-center gap-3 border-t pt-5"><span className="grid size-9 place-items-center rounded-full bg-slate-100"><GraduationCap className="size-5 text-slate-500"/></span><div><p className="text-xs font-semibold">Examination workspace</p><p className="mt-1 text-[10px] text-slate-400">Local demonstration</p></div></div></div>
-    </aside>
-    <div className="xl:ml-[232px]">
-      <header className="flex h-[76px] items-center justify-between border-b border-slate-200/80 bg-white px-5 sm:px-9"><div className="flex items-center gap-2 text-xs"><span className="mr-2 font-semibold xl:hidden">ExamLens.</span><span className="hidden text-slate-400 sm:inline">Workspace</span><ChevronRight className="hidden size-3 text-slate-300 sm:block"/><span className="font-medium text-slate-600">Live dashboard</span></div><div className="flex items-center gap-4"><span className="hidden items-center gap-1.5 text-[11px] text-slate-500 sm:flex"><ShieldCheck className="size-3.5 text-emerald-700"/>Local workspace</span><span className="h-5 border-l"/><button onClick={()=>setHelp(true)} aria-label="Open demo guide" className="rounded-full p-2 hover:bg-slate-100"><CircleHelp className="size-[18px] text-slate-500"/></button></div></header>
-      <main id="overview" className="mx-auto max-w-[1500px] space-y-7 px-5 py-8 sm:px-9 sm:py-9">
-        <div className="flex flex-wrap items-center justify-between gap-4"><div><div className="mb-2 flex items-center gap-2 text-[10px] font-semibold uppercase tracking-[.18em] text-emerald-800"><span className="size-1.5 rounded-full bg-emerald-700"/>Intelligent examination attendance</div><h1 className="text-[28px] font-semibold tracking-[-1px] sm:text-[30px]">Live recognition dashboard</h1><p className="mt-2 text-xs text-slate-500 sm:text-sm">Every face recognized. Every attendance accounted for.</p></div><div className="flex flex-wrap gap-2"><DemoControls disabled={illustration || !!error} onChanged={()=>setRetry(r=>r+1)}/><Button variant="outline" className="h-9 bg-white text-xs shadow-none" onClick={()=>setIllustration(!illustration)}>{illustration?<Radio/>:<BookOpen/>}{illustration?"Connect live data":"Preview layout"}</Button><Button className="h-9 bg-emerald-800 text-xs text-white hover:bg-emerald-900" disabled={!feed?.attendance.length || !!error} onClick={exportAttendance}><ArrowDownToLine/>Export attendance</Button></div></div>
-        {illustration && <div role="status" className="flex items-center justify-between gap-4 rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-xs text-amber-900"><span><strong>Illustrative preview.</strong> All names, records, statistics and academic details below are fictional—not live system data.</span><button onClick={()=>setIllustration(false)} className="shrink-0 font-semibold underline">Exit preview</button></div>}
-        {error && <div role="alert" className="flex items-center gap-3 rounded-lg border border-amber-200 bg-amber-50 p-4 text-xs text-amber-950"><WifiOff className="size-4 shrink-0"/><span className="flex-1">{error} {feed?"Values shown are from the last successful update and may be stale.":"No live values are shown."}</span><Button size="sm" variant="outline" onClick={()=>setRetry(r=>r+1)}><RefreshCw/>Retry</Button></div>}
-        <Card className="overflow-hidden rounded-xl border-slate-200/80 py-0 shadow-none"><CardContent className="flex flex-wrap items-stretch justify-between gap-5 p-0"><div className="flex w-full min-w-0 items-center gap-5 p-6 sm:w-auto sm:flex-1"><span className="hidden size-[62px] shrink-0 items-center justify-center rounded-xl border border-emerald-100 bg-emerald-50 text-emerald-800 sm:flex"><GraduationCap className="size-8" strokeWidth={1.5}/></span><div><p className="mb-2 text-[10px] font-semibold tracking-[.16em] text-slate-400">CURRENT EXAMINATION</p><h2 className="text-lg font-semibold tracking-tight">{exam?.course_title || (loading?"Connecting to local session…":"Ready for your next examination")}</h2><div className="mt-2 flex flex-wrap gap-x-5 gap-y-2 text-[11px] text-slate-500"><span className="flex items-center gap-1.5"><MapPin className="size-3.5"/>{exam?.hall || "Venue appears when a session starts"}</span>{exam && <span className="flex items-center gap-1.5"><BookOpen className="size-3.5"/>{exam.course_code}</span>}<span className="flex items-center gap-1.5"><Clock3 className="size-3.5"/>{exam?`${time(exam.starts_at)} – ${time(exam.ends_at)} GMT`:"Offline recognition supported"}</span></div></div></div><div className="flex w-full min-w-[190px] flex-col justify-center border-t border-slate-100 px-6 py-5 sm:w-auto sm:border-t-0 sm:border-l"><Badge variant="outline" className={`gap-2 rounded-full px-3 py-1.5 text-[11px] font-medium ${active?"border-emerald-200 bg-emerald-50 text-emerald-800":"border-slate-200 bg-slate-50 text-slate-500"}`}><span className={`size-1.5 rounded-full ${active?"bg-emerald-600":"bg-slate-400"}`}/>{error?"API disconnected":statusLabel(live?.status || "idle")}</Badge><span className="mt-2 text-center text-[10px] text-slate-400">{active?`${live?.processed_fps?.toFixed(1) || "0.0"} processing FPS · ByteTrack`:"Waiting for camera worker"}</span></div></CardContent></Card>
-        {live?.error && !error && <p role="alert" className="rounded-lg border border-red-100 bg-red-50 p-4 text-sm text-red-800">Camera worker: {live.error}</p>}
-        <section aria-label="Session statistics" className="grid gap-4 sm:grid-cols-3">
-          {[
-            {title:"Identified students",value:live?.identified_count,icon:UserRoundCheck,detail:"Distinct identities this session",color:"emerald"},
-            {title:"Unidentified now",value:active?live?.unidentified_now:0,icon:UserRoundSearch,detail:"Visible unknown tracks · not unique people",color:"amber"},
-            {title:"Marked present",value:live?.present_count,icon:CheckCheck,detail:"Saved for this exam · includes earlier runs",color:"blue"},
-          ].map(stat=><Card key={stat.title} className="gap-0 rounded-xl border-slate-200/80 py-0 shadow-none"><CardContent className="p-5"><div className="flex items-center justify-between"><p className="text-xs font-medium text-slate-500">{stat.title}</p><span className={`grid size-9 place-items-center rounded-lg ${stat.color==="emerald"?"bg-emerald-50 text-emerald-700":stat.color==="amber"?"bg-amber-50 text-amber-600":"bg-blue-50 text-blue-600"}`}><stat.icon className="size-[18px]" strokeWidth={1.7}/></span></div><p className="mt-1 text-[36px] font-semibold leading-[1.4] tracking-[-1.5px] tabular-nums">{!feed || error?"—":stat.value ?? 0}</p><p className="mt-2 text-[10px] text-slate-400">{stat.detail}</p></CardContent></Card>)}
-        </section>
-        {latestStudent && latestAcademic && <Card className="gap-0 rounded-xl border-emerald-100 bg-white py-0 shadow-none"><CardContent className="flex flex-wrap items-center justify-between gap-5 p-6"><div className="flex items-center gap-4"><Avatar name={latestStudent.full_name} large/><div><p className="mb-1 text-[10px] font-semibold uppercase tracking-[.16em] text-emerald-700">Latest recognition / saved record</p><button onClick={()=>setSelected(latestStudent)} className="text-left text-xl font-semibold hover:text-emerald-800">{latestStudent.full_name}</button><p className="mt-1 text-xs text-slate-500">{latestStudent.student_no}</p><p className="mt-2 max-w-lg text-xs text-slate-500">{latestAcademic.department || "Department not supplied"}</p></div></div><div className="flex flex-col items-start gap-2 sm:items-end"><Badge variant="outline" className="border-emerald-200 bg-emerald-50 px-3 py-1.5 text-emerald-800">{latestAcademic.level ? `Level ${latestAcademic.level}` : "Level not supplied"}</Badge><p className="text-xs text-slate-500">{latestAcademic.programme || "Programme not supplied"}</p>{latestAcademic.is_demo_metadata && <span className="text-[10px] text-amber-700">Academic details use presentation mappings</span>}</div></CardContent></Card>}
-        <div className="grid items-start gap-6 2xl:grid-cols-[1fr_340px] lg:grid-cols-[minmax(0,1fr)_300px]">
-          <Card id="students" className="gap-0 overflow-hidden rounded-xl border-slate-200/80 py-0 shadow-none"><div className="flex items-start justify-between px-6 pt-6"><div><h2 className="text-sm font-semibold">Recognized students</h2><p className="mt-1.5 text-[11px] text-slate-400">Live identifications and saved examination attendance</p></div><Badge variant="outline" className="rounded-md border-slate-200 text-[10px] font-normal text-slate-500">{feed?students.length:"—"} students</Badge></div><div className="mt-6 flex flex-wrap items-center justify-between gap-3 border-b px-6 pb-4"><div className="flex gap-1 rounded-lg bg-slate-100 p-1"><button onClick={()=>setTab("all")} className={`rounded-md px-3 py-1.5 text-[11px] font-medium ${tab==="all"?"bg-white shadow-xs":"text-slate-500"}`}>All recognized</button><button onClick={()=>setTab("present")} className={`rounded-md px-3 py-1.5 text-[11px] font-medium ${tab==="present"?"bg-white shadow-xs":"text-slate-500"}`}>Present</button></div><div className="relative w-full sm:w-[190px]"><Search className="absolute left-2.5 top-2.5 size-3.5 text-slate-400"/><Input value={query} onChange={e=>setQuery(e.target.value)} aria-label="Search students" placeholder="Search name or index…" className="h-8 rounded-lg border-slate-200 pl-8 text-[11px] shadow-none"/></div></div>
-          <div className="overflow-x-auto"><table className="w-full text-left"><thead className="bg-slate-50/70 text-[9px] tracking-wider text-slate-400 uppercase"><tr><th className="px-6 py-3 font-medium">Student</th><th className="hidden px-3 py-3 font-medium md:table-cell">Time · GMT</th><th className="px-4 py-3 font-medium">Attendance</th><th className="w-8"><span className="sr-only">Details</span></th></tr></thead><tbody>{students.map(student=>{
-            const details=academic(student);
-            const record=feed?.attendance.find(r=>r.student_no===student.student_no);
-            const recognized=live?.events.filter(e=>e.student_no===student.student_no && e.kind==="identified").at(-1);
-            return <tr key={student.student_no} className="group border-t border-slate-100 hover:bg-slate-50/70"><td className="px-6 py-[18px]"><button onClick={()=>setSelected(student)} className="flex items-center gap-3 text-left outline-offset-4"><Avatar name={student.full_name}/><span><span className="block text-xs font-medium group-hover:text-emerald-800">{student.full_name}</span><span className="mt-1 block text-[10px] text-slate-400">{student.student_no}</span><span className="mt-1 block text-[10px] text-emerald-700">{details.level ? `Level ${details.level}` : "Level not supplied"} · {details.programme || "Programme not supplied"}</span>{details.department && <span className="mt-1 block max-w-[260px] text-[10px] leading-4 text-slate-400">{details.department}</span>}</span></button></td><td className="hidden px-3 text-[11px] tabular-nums text-slate-500 md:table-cell">{time(recognized?.at || record?.recorded_at)}</td><td className="px-4"><span className={`inline-flex items-center gap-1.5 rounded-md px-2 py-1 text-[10px] ${record?"bg-emerald-50 text-emerald-800":"bg-amber-50 text-amber-800"}`}>{record?<Check className="size-3"/>:<Clock3 className="size-3"/>}{record?"Present":"Not recorded"}</span></td><td className="pr-4"><button onClick={()=>setSelected(student)} aria-label={`View ${student.full_name}`} className="rounded p-1 text-slate-300 hover:bg-slate-100 hover:text-emerald-800"><ChevronRight className="size-4"/></button></td></tr>;
-          })}</tbody></table></div>
-          {!students.length && <div className="flex min-h-[248px] flex-col items-center justify-center px-6 text-center"><span className="mb-4 grid size-12 place-items-center rounded-full border border-dashed border-slate-200 bg-slate-50"><ScanFace className="size-6 text-slate-400" strokeWidth={1.4}/></span><p className="text-sm font-medium">{query?"No matching students":loading?"Connecting to attendance data…":"Your next recognition appears here"}</p><p className="mt-2 max-w-[280px] text-xs leading-5 text-slate-400">{query?"Try another name or index number.":"Start the local camera session. Recognized students and saved attendance will update automatically."}</p></div>}
-          <div className="flex items-center justify-between border-t border-slate-100 px-6 py-4 text-[10px] text-slate-400"><span>{students.length?`Showing ${students.length} students`:"No student records to display"}</span><span className="flex items-center gap-1.5"><RefreshCw className="size-3"/>Updates every 2s</span></div></Card>
-          <Card id="activity" className="gap-0 overflow-hidden rounded-xl border-slate-200/80 py-0 shadow-none"><div className="flex items-center justify-between border-b border-slate-100 p-5"><h2 className="text-sm font-semibold">Recognition activity</h2><span className={`flex items-center gap-1.5 text-[10px] ${active?"text-emerald-700":"text-slate-400"}`}><Radio className="size-3.5"/>{active?"Live":"Standby"}</span></div><div className="max-h-[390px] overflow-y-auto px-5 py-2" aria-live="off">{live?.events.length ? [...live.events].reverse().slice(0,30).map(event=><div key={event.id} className="relative flex gap-3 border-b border-slate-100 py-4 last:border-0"><span className={`mt-0.5 grid size-7 shrink-0 place-items-center rounded-full ${["present","identified","already_present"].includes(event.kind)?"bg-emerald-50 text-emerald-700":event.kind==="unknown"?"bg-amber-50 text-amber-600":"bg-slate-100 text-slate-400"}`}>{event.kind==="unknown"?<UserRoundSearch className="size-3.5"/>:event.kind==="present"?<Check className="size-3.5"/>:<ScanFace className="size-3.5"/>}</span><div className="min-w-0 flex-1"><p className="truncate text-[11px] font-medium">{nameFor(event.student_no) || (event.track_id?`Face track #${event.track_id}`:"Camera session")}</p><p className="mt-1 text-[10px] leading-4 text-slate-500">{eventLabel(event.kind)}</p>{event.reasons && <p className="mt-1 text-[10px] text-amber-700">{event.reasons.join(" · ")}</p>}</div><span className="mt-0.5 text-[9px] tabular-nums text-slate-400">{time(event.at)}</span></div>):<div className="flex min-h-[250px] flex-col items-center justify-center text-center"><Activity className="mb-4 size-7 text-slate-300" strokeWidth={1.3}/><p className="text-xs font-medium text-slate-500">Listening for recognition events</p><p className="mt-2 text-[11px] leading-5 text-slate-400">Camera activity will appear here<br/>when a session is running.</p></div>}</div><div className="flex items-center gap-2 border-t bg-slate-50/60 px-5 py-3 text-[9px] text-slate-400"><span className={`size-1.5 rounded-full ${active?"bg-emerald-500":"bg-slate-300"}`}/>{active?"Recognition engine running":"Recognition engine on standby"}</div></Card>
+  const identified =
+    live?.identified_count ??
+    new Set(
+      live?.events
+        .filter((e) => e.kind === "identified")
+        .map((e) => e.student_no)
+        .filter(Boolean),
+    ).size;
+  const lastRecord = feed?.attendance.find(
+    (record) => record.student_no === latestStudent?.student_no,
+  );
+  const metrics = [
+    {
+      label: "Present",
+      value: feed && !error ? feed.attendance.length : "—",
+      note: "Saved examination records",
+    },
+    {
+      label: "Identified",
+      value: feed && !error ? identified : "—",
+      note: "Distinct identities this session",
+    },
+    {
+      label: "Unidentified",
+      value: feed && !error ? (live?.unidentified_now ?? 0) : "—",
+      note: "Unmatched tracks in view",
+    },
+    {
+      label: "Processing rate",
+      value:
+        !error && live?.processed_fps != null
+          ? `${live.processed_fps.toFixed(1)}`
+          : "—",
+      note:
+        live?.processed_fps != null
+          ? "Processed frames / second"
+          : "Available when camera is running",
+    },
+  ];
+  return (
+    <div className="min-h-screen bg-background text-foreground">
+      <a
+        href="#overview"
+        className="sr-only focus:not-sr-only focus:fixed focus:left-4 focus:top-4 focus:z-[60] focus:rounded-md focus:bg-background focus:p-3"
+      >
+        Skip to content
+      </a>
+      {navOpen && (
+        <button
+          aria-label="Close navigation"
+          onClick={() => setNavOpen(false)}
+          className="fixed inset-0 z-30 bg-black/40 md:hidden"
+        />
+      )}
+      <aside
+        aria-label="Workspace navigation"
+        className={`${navOpen ? "flex" : "hidden"} fixed inset-y-0 left-0 z-40 w-52 flex-col border-r bg-neutral-50 md:flex`}
+      >
+        <a
+          href="#overview"
+          onClick={() => setNavOpen(false)}
+          className="flex h-14 items-center gap-2.5 border-b px-5"
+        >
+          <span className="grid size-7 place-items-center rounded-md bg-primary text-primary-foreground">
+            <ScanFace className="size-4" />
+          </span>
+          <span className="text-sm font-semibold tracking-tight">ExamLens</span>
+        </a>
+        <div className="p-3">
+          <div className="mb-5 rounded-md border bg-background px-3 py-2.5">
+            <p className="text-xs font-medium">Examination workspace</p>
+            <p className="mt-1 text-[11px] text-muted-foreground">
+              Local demonstration
+            </p>
+          </div>
+          <p className="mb-2 px-2 text-[11px] font-medium text-muted-foreground">
+            Workspace
+          </p>
+          <nav className="space-y-1">
+            {[
+              ["#overview", "Overview", LayoutDashboard],
+              ["#students", "Attendance", Users],
+              ["#activity", "Activity log", Activity],
+            ].map(([href, label, Icon]) => {
+              const NavIcon = Icon as typeof Activity;
+              return (
+                <a
+                  key={String(href)}
+                  href={String(href)}
+                  onClick={() => {
+                    setNavOpen(false);
+                    setSection(String(href));
+                  }}
+                  className={`flex items-center gap-2.5 rounded-md px-2.5 py-2 text-xs ${section === href ? "bg-neutral-200/65 font-medium" : "text-muted-foreground hover:bg-neutral-100 hover:text-foreground"}`}
+                >
+                  <NavIcon className="size-4" />
+                  {String(label)}
+                </a>
+              );
+            })}
+          </nav>
         </div>
-        <div className="flex flex-wrap items-center justify-between gap-3 border-t border-slate-200/70 pt-5 text-[10px] text-slate-400"><span className="flex items-center gap-1.5"><ShieldCheck className="size-3.5"/>Face recognition & automated examination attendance</span><span>{illustration?"Illustrative data only":error?"Connection interrupted":live?.updated_at?`Last updated ${time(live.updated_at)} GMT`:"Waiting for local session"}<span className="mx-2">·</span>InsightFace + ByteTrack</span></div>
-      </main>
+        <div className="mt-auto space-y-3 border-t p-3">
+          <Button
+            variant="ghost"
+            size="sm"
+            className="w-full justify-start text-xs text-muted-foreground"
+            onClick={() => {
+              setHelp(true);
+              setNavOpen(false);
+            }}
+          >
+            <CircleHelp />
+            Demo guide
+          </Button>
+          <div className="flex items-center gap-2 px-2 text-[11px] text-muted-foreground">
+            <Database className="size-3.5" />
+            <span>Local database</span>
+            <span
+              className={`ml-auto size-1.5 rounded-full ${error ? "bg-amber-500" : "bg-neutral-400"}`}
+            />
+          </div>
+        </div>
+      </aside>
+      <div className="min-w-0 md:ml-52">
+        <header className="flex h-14 items-center justify-between gap-3 border-b px-4 sm:px-7">
+          <div className="flex min-w-0 items-center gap-3">
+            <Button
+              variant="ghost"
+              size="icon-sm"
+              className="md:hidden"
+              aria-label="Toggle navigation"
+              aria-expanded={navOpen}
+              onClick={() => setNavOpen(!navOpen)}
+            >
+              {navOpen ? <X /> : <Menu />}
+            </Button>
+            <span className="text-xs text-muted-foreground">Workspace</span>
+            <ChevronRight className="size-3 text-muted-foreground" />
+            <span className="text-xs font-medium">
+              {section === "#students"
+                ? "Attendance"
+                : section === "#activity"
+                  ? "Activity log"
+                  : "Overview"}
+            </span>
+          </div>
+          <div className="flex items-center gap-2 text-[11px] text-muted-foreground">
+            <span
+              className={`size-1.5 rounded-full ${error ? "bg-amber-500" : active ? "bg-emerald-600" : "bg-neutral-400"}`}
+            />
+            {illustration
+              ? "Preview mode"
+              : error
+                ? "API disconnected"
+                : active
+                  ? "Local · connected"
+                  : "Local workspace"}
+            <Button
+              variant="ghost"
+              size="icon-sm"
+              onClick={() => setHelp(true)}
+              aria-label="Open demo guide"
+            >
+              <CircleHelp className="size-4" />
+            </Button>
+          </div>
+        </header>
+        <main
+          id="overview"
+          className="mx-auto max-w-[1600px] space-y-6 p-4 sm:p-7 lg:p-8"
+        >
+          <div className="flex flex-wrap items-start justify-between gap-4">
+            <div>
+              <h1 className="text-2xl font-semibold tracking-tight">
+                Attendance overview
+              </h1>
+              <p className="mt-1.5 text-sm text-muted-foreground">
+                Recognition session and saved examination records.
+              </p>
+            </div>
+            <div className="flex flex-wrap items-center gap-2">
+              <DemoControls
+                disabled={illustration || !!error}
+                onChanged={() => setRetry((r) => r + 1)}
+              />
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => setIllustration(!illustration)}
+              >
+                {illustration ? <Radio /> : <BookOpen />}
+                {illustration ? "Connect live data" : "Preview layout"}
+              </Button>
+              <Button
+                size="sm"
+                disabled={!feed?.attendance.length || !!error}
+                onClick={exportAttendance}
+              >
+                <ArrowDownToLine />
+                Export attendance
+              </Button>
+            </div>
+          </div>
+          {illustration && (
+            <div
+              role="status"
+              className="flex flex-wrap items-center justify-between gap-2 rounded-md border border-dashed bg-muted/40 px-4 py-3 text-xs text-muted-foreground"
+            >
+              <span>
+                <strong className="font-medium text-foreground">
+                  Illustrative preview.
+                </strong>{" "}
+                Fictional people and records. Not live system data.
+              </span>
+              <Button
+                variant="ghost"
+                size="xs"
+                onClick={() => setIllustration(false)}
+              >
+                Exit preview
+                <X className="size-3" />
+              </Button>
+            </div>
+          )}
+          {error && (
+            <div
+              role="alert"
+              className="flex flex-wrap items-center gap-3 rounded-md border border-amber-200 bg-amber-50 p-3 text-xs text-amber-950"
+            >
+              <WifiOff className="size-4 shrink-0" />
+              <span className="min-w-0 flex-1">
+                {error}{" "}
+                {feed
+                  ? "Last successful values are shown and may be stale."
+                  : "No live values are shown."}
+              </span>
+              <Button
+                size="sm"
+                variant="outline"
+                onClick={() => setRetry((r) => r + 1)}
+              >
+                <RefreshCw />
+                Retry
+              </Button>
+            </div>
+          )}
+          {live?.error && !error && (
+            <div
+              role="alert"
+              className="rounded-md border border-destructive/25 bg-destructive/5 p-3 text-xs text-destructive"
+            >
+              Camera session: {live.error}
+            </div>
+          )}
+          <Card className="gap-0 overflow-hidden py-0 shadow-none">
+            <CardContent className="p-0">
+              <div className="flex flex-wrap items-center justify-between gap-4 border-b px-5 py-4">
+                <div className="flex min-w-0 items-center gap-3">
+                  <Badge
+                    variant="secondary"
+                    className="rounded-md font-mono text-xs"
+                  >
+                    {exam?.course_code || "No exam"}
+                  </Badge>
+                  <h2 className="text-sm font-medium">
+                    {exam?.course_title || "No examination selected"}
+                  </h2>
+                </div>
+                <Badge
+                  variant="outline"
+                  className="gap-2 rounded-md font-normal"
+                >
+                  <span
+                    className={`size-1.5 rounded-full ${active ? "bg-emerald-600" : "bg-neutral-400"}`}
+                  />
+                  {loading
+                    ? "Connecting…"
+                    : error
+                      ? "Connection unavailable"
+                      : statusLabel(live?.status || "idle")}
+                </Badge>
+              </div>
+              <dl className="grid grid-cols-2 gap-x-5 gap-y-4 px-5 py-4 text-xs lg:grid-cols-4">
+                {[
+                  ["Venue", exam?.hall || "Not selected"],
+                  [
+                    "Scheduled time",
+                    exam
+                      ? `${time(exam.starts_at)} – ${time(exam.ends_at)} GMT`
+                      : "No schedule",
+                  ],
+                  [
+                    "Session started",
+                    live?.started_at
+                      ? `${time(live.started_at)} GMT`
+                      : "Not started",
+                  ],
+                  [
+                    "Data source",
+                    illustration
+                      ? "Illustrative fixture"
+                      : "Local attendance database",
+                  ],
+                ].map(([label, value]) => (
+                  <div key={label}>
+                    <dt className="text-muted-foreground">{label}</dt>
+                    <dd className="mt-1.5 break-words font-medium">{value}</dd>
+                  </div>
+                ))}
+              </dl>
+            </CardContent>
+          </Card>
+          <section
+            aria-label="Session statistics"
+            className="grid grid-cols-2 gap-3 lg:grid-cols-4"
+          >
+            {metrics.map((metric) => (
+              <Card key={metric.label} className="gap-0 py-0 shadow-none">
+                <CardContent className="p-4 lg:p-5">
+                  <h2 className="text-xs font-medium text-muted-foreground">
+                    {metric.label}
+                  </h2>
+                  <p className="mt-3 text-3xl font-semibold tracking-tight tabular-nums">
+                    {metric.value}
+                  </p>
+                  <p className="mt-2 text-[11px] leading-4 text-muted-foreground">
+                    {metric.note}
+                  </p>
+                </CardContent>
+              </Card>
+            ))}
+          </section>
+          <div className="grid min-w-0 items-start gap-5 xl:grid-cols-[minmax(0,1fr)_290px]">
+            <section id="students" className="min-w-0">
+              <Tabs
+                value={tab}
+                onValueChange={(value) => setTab(value as "all" | "present")}
+                className="gap-0"
+              >
+                <Card className="gap-0 overflow-hidden py-0 shadow-none">
+                  <div className="flex flex-wrap items-center justify-between gap-3 border-b p-4">
+                    <div>
+                      <h2 className="text-sm font-semibold">Student records</h2>
+                      <p className="mt-1 text-xs text-muted-foreground">
+                        Recognized identities and saved attendance.
+                      </p>
+                    </div>
+                    <TabsList aria-label="Record filter">
+                      <TabsTrigger value="all">All records</TabsTrigger>
+                      <TabsTrigger value="present">Present only</TabsTrigger>
+                    </TabsList>
+                  </div>
+                  <div className="flex flex-wrap items-center justify-between gap-3 border-b px-4 py-3">
+                    <div className="relative w-full sm:max-w-xs">
+                      <Search className="pointer-events-none absolute left-2.5 top-2.5 size-3.5 text-muted-foreground" />
+                      <Input
+                        aria-label="Search students"
+                        placeholder="Search name, index or department…"
+                        value={query}
+                        onChange={(event) => setQuery(event.target.value)}
+                        className="h-8 pl-8 text-xs shadow-none"
+                      />
+                    </div>
+                    <span className="text-xs text-muted-foreground">
+                      {students.length} record{students.length === 1 ? "" : "s"}
+                    </span>
+                  </div>
+                  {["all", "present"].map((value) => (
+                    <TabsContent key={value} value={value} className="m-0">
+                      <Table className="min-w-[650px]">
+                        <TableHeader className="bg-muted/35">
+                          <TableRow>
+                            <TableHead>Student</TableHead>
+                            <TableHead>Index number</TableHead>
+                            <TableHead>Academic details</TableHead>
+                            <TableHead>Recorded</TableHead>
+                            <TableHead>Status</TableHead>
+                            <TableHead className="w-10">
+                              <span className="sr-only">Details</span>
+                            </TableHead>
+                          </TableRow>
+                        </TableHeader>
+                        <TableBody>
+                          {students.map((student) => {
+                            const details = academic(student);
+                            const record = feed?.attendance.find(
+                              (r) => r.student_no === student.student_no,
+                            );
+                            return (
+                              <TableRow key={student.student_no}>
+                                <TableCell>
+                                  <button
+                                    onClick={() => setSelected(student)}
+                                    className="flex items-center gap-2.5 text-left"
+                                  >
+                                    <Avatar name={student.full_name} />
+                                    <span className="min-w-[100px] text-xs font-medium">
+                                      {student.full_name}
+                                    </span>
+                                  </button>
+                                </TableCell>
+                                <TableCell className="whitespace-nowrap font-mono text-[11px] text-muted-foreground">
+                                  {student.student_no}
+                                </TableCell>
+                                <TableCell>
+                                  <p className="text-xs font-medium">
+                                    {details.level
+                                      ? `Level ${details.level}`
+                                      : "Level not supplied"}
+                                  </p>
+                                  <p className="mt-1 max-w-[190px] text-[11px] leading-4 text-muted-foreground">
+                                    {details.department ||
+                                      details.programme ||
+                                      "Department not supplied"}
+                                  </p>
+                                </TableCell>
+                                <TableCell className="whitespace-nowrap font-mono text-[11px] text-muted-foreground">
+                                  {time(record?.recorded_at)}
+                                </TableCell>
+                                <TableCell>
+                                  <AttendanceBadge present={!!record} />
+                                </TableCell>
+                                <TableCell className="px-2">
+                                  <Button
+                                    variant="ghost"
+                                    size="icon-xs"
+                                    onClick={() => setSelected(student)}
+                                    aria-label={`View ${student.full_name}`}
+                                  >
+                                    <ArrowUpRight className="size-3.5" />
+                                  </Button>
+                                </TableCell>
+                              </TableRow>
+                            );
+                          })}
+                          {!students.length && (
+                            <TableRow>
+                              <TableCell
+                                colSpan={6}
+                                className="h-52 text-center"
+                              >
+                                <p className="text-sm font-medium">
+                                  {loading
+                                    ? "Loading records…"
+                                    : query
+                                      ? "No matching students"
+                                      : tab === "present"
+                                        ? "No attendance recorded"
+                                        : "No recognition records yet"}
+                                </p>
+                                <p className="mx-auto mt-2 max-w-xs text-xs leading-5 text-muted-foreground">
+                                  {query
+                                    ? "Try a different name, index number or department."
+                                    : error
+                                      ? "Reconnect the local API to load records."
+                                      : "Use Demo controls to start recognition. Confirmed identities will appear here."}
+                                </p>
+                              </TableCell>
+                            </TableRow>
+                          )}
+                        </TableBody>
+                      </Table>
+                    </TabsContent>
+                  ))}
+                  <div className="flex flex-wrap items-center justify-between gap-2 border-t bg-muted/20 px-4 py-3 text-[10px] text-muted-foreground">
+                    <span>Academic labels are presentation metadata.</span>
+                    <span className="font-mono">24 → Level 300</span>
+                  </div>
+                </Card>
+              </Tabs>
+            </section>
+            <div className="min-w-0 space-y-5">
+              <Card className="gap-0 py-0 shadow-none">
+                <div className="flex items-center justify-between border-b px-4 py-3.5">
+                  <h2 className="text-xs font-semibold">
+                    Latest student record
+                  </h2>
+                  <Users className="size-3.5 text-muted-foreground" />
+                </div>
+                <CardContent className="p-4">
+                  {latestStudent && latestAcademic ? (
+                    <>
+                      <div className="flex items-center gap-3">
+                        <Avatar name={latestStudent.full_name} large />
+                        <div className="min-w-0">
+                          <button
+                            onClick={() => setSelected(latestStudent)}
+                            className="text-left text-sm font-medium hover:underline"
+                          >
+                            {latestStudent.full_name}
+                          </button>
+                          <p className="mt-1 break-all font-mono text-[10px] text-muted-foreground">
+                            {latestStudent.student_no}
+                          </p>
+                        </div>
+                      </div>
+                      <dl className="mt-5 space-y-3 text-xs">
+                        <div className="flex justify-between gap-3">
+                          <dt className="text-muted-foreground">Level</dt>
+                          <dd className="font-medium">
+                            {latestAcademic.level
+                              ? `Level ${latestAcademic.level}`
+                              : "Not supplied"}
+                          </dd>
+                        </div>
+                        <div>
+                          <dt className="text-muted-foreground">Department</dt>
+                          <dd className="mt-1 leading-5">
+                            {latestAcademic.department || "Not supplied"}
+                          </dd>
+                        </div>
+                        <div className="flex items-center justify-between gap-3">
+                          <dt className="text-muted-foreground">Attendance</dt>
+                          <dd>
+                            <AttendanceBadge present={!!lastRecord} />
+                          </dd>
+                        </div>
+                      </dl>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        className="mt-5 w-full text-xs"
+                        onClick={() => setSelected(latestStudent)}
+                      >
+                        Open student details
+                        <ArrowUpRight />
+                      </Button>
+                    </>
+                  ) : (
+                    <p className="py-5 text-xs leading-5 text-muted-foreground">
+                      Student information appears after recognition or when
+                      saved attendance is loaded.
+                    </p>
+                  )}
+                </CardContent>
+              </Card>
+              <Card
+                id="activity"
+                className="gap-0 overflow-hidden py-0 shadow-none"
+              >
+                <div className="flex items-center justify-between border-b px-4 py-3.5">
+                  <h2 className="text-xs font-semibold">Activity log</h2>
+                  <Badge
+                    variant="secondary"
+                    className="rounded-md font-mono text-[10px]"
+                  >
+                    {live?.events.length || 0}
+                  </Badge>
+                </div>
+                <CardContent className="max-h-[440px] overflow-y-auto p-0">
+                  {live?.events.length ? (
+                    [...live.events]
+                      .reverse()
+                      .slice(0, 30)
+                      .map((event) => (
+                        <div
+                          key={event.id}
+                          className="flex gap-2.5 border-b px-4 py-3 last:border-0"
+                        >
+                          <span
+                            className={`mt-1.5 size-1.5 shrink-0 rounded-full ${["present", "already_present"].includes(event.kind) ? "bg-emerald-600" : ["unknown", "not_eligible", "error", "not_live"].includes(event.kind) ? "bg-amber-500" : "bg-neutral-400"}`}
+                          />
+                          <div className="min-w-0 flex-1">
+                            <div className="flex items-start justify-between gap-2">
+                              <p className="min-w-0 break-words text-[11px] font-medium">
+                                {nameFor(event.student_no) ||
+                                  (event.track_id != null
+                                    ? `Face track #${event.track_id}`
+                                    : "Camera session")}
+                              </p>
+                              <time className="shrink-0 font-mono text-[9px] leading-4 text-muted-foreground">
+                                {time(event.at)}
+                              </time>
+                            </div>
+                            <p className="mt-1 text-[11px] text-muted-foreground">
+                              {eventLabel(event.kind)}
+                            </p>
+                            {!!event.reasons?.length && (
+                              <p className="mt-1 text-[10px] leading-4 text-amber-800">
+                                {event.reasons.join(" · ")}
+                              </p>
+                            )}
+                          </div>
+                        </div>
+                      ))
+                  ) : (
+                    <p className="px-4 py-8 text-xs leading-5 text-muted-foreground">
+                      No events yet. Recognition activity appears here when the
+                      camera session starts.
+                    </p>
+                  )}
+                </CardContent>
+                <div className="border-t bg-muted/25 px-4 py-2.5 text-[10px] text-muted-foreground">
+                  {active
+                    ? "Recognition engine running"
+                    : "Recognition engine on standby"}
+                </div>
+              </Card>
+            </div>
+          </div>
+          <footer className="flex flex-wrap items-center justify-between gap-2 border-t pt-4 text-[10px] text-muted-foreground">
+            <span>InsightFace / ByteTrack · Local processing</span>
+            <span>
+              {illustration
+                ? "Illustrative data only"
+                : error
+                  ? "Connection interrupted"
+                  : live?.updated_at
+                    ? `Updated ${time(live.updated_at)} GMT · refreshes every 2s`
+                    : "Waiting for local session"}
+            </span>
+          </footer>
+        </main>
+      </div>
+      <Dialog
+        open={!!selected}
+        onOpenChange={(open) => !open && setSelected(null)}
+      >
+        <DialogContent>
+          <DialogTitle className="text-lg font-semibold tracking-tight">
+            Student details
+          </DialogTitle>
+          <DialogDescription className="mt-2 text-xs leading-5 text-muted-foreground">
+            Enrollment identity and examination attendance. Academic details are
+            locally supplied, not university-verified.
+          </DialogDescription>
+          {selected && (
+            <>
+              <div className="mt-7 flex items-center gap-3 border-y py-5">
+                <Avatar name={selected.full_name} large />
+                <div className="min-w-0">
+                  <p className="text-base font-semibold">
+                    {selected.full_name}
+                  </p>
+                  <p className="mt-1 break-all font-mono text-xs text-muted-foreground">
+                    {selected.student_no}
+                  </p>
+                </div>
+              </div>
+              <div className="mt-5 flex items-center justify-between">
+                <Badge variant="secondary" className="rounded-md">
+                  {selectedAcademic?.level
+                    ? `Level ${selectedAcademic.level}`
+                    : "Level not supplied"}
+                </Badge>
+                <AttendanceBadge present={!!selectedRecord} />
+              </div>
+              <dl className="mt-5 divide-y">
+                {[
+                  ["Programme", selectedAcademic?.programme || "Not supplied"],
+                  [
+                    "Department",
+                    selectedAcademic?.department || "Not supplied",
+                  ],
+                  [
+                    "Index programme code",
+                    selectedAcademic?.index_programme_code || "Not supplied",
+                  ],
+                  [
+                    "Index year code",
+                    selectedAcademic?.index_year_code || "Not supplied",
+                  ],
+                  ["Examination", exam?.course_title || "—"],
+                  ["Building / venue", exam?.hall || "—"],
+                  ["Recognized at", time(selectedRecognition?.at)],
+                  ["Attendance recorded", time(selectedRecord?.recorded_at)],
+                  ["Face samples", selected.face_samples],
+                  ["Source", selectedRecord?.source || "Not recorded"],
+                ].map(([label, value]) => (
+                  <div
+                    key={String(label)}
+                    className="flex justify-between gap-5 py-3 text-xs"
+                  >
+                    <dt className="shrink-0 text-muted-foreground">{label}</dt>
+                    <dd className="text-right font-medium leading-5">
+                      {value}
+                    </dd>
+                  </div>
+                ))}
+              </dl>
+              {selectedAcademic?.is_demo_metadata && (
+                <div className="mt-5 rounded-md border bg-muted/40 p-3 text-[11px] leading-5 text-muted-foreground">
+                  <p className="font-medium text-foreground">
+                    Academic display rules
+                  </p>
+                  <p className="mt-1">
+                    CSC → Computer Science and Information Technology.
+                    <br />
+                    24 → Level 300 for this demonstration.
+                  </p>
+                  <p className="mt-2">
+                    These rules do not change student records or eligibility.
+                  </p>
+                </div>
+              )}
+              <p className="mt-4 text-[10px] text-muted-foreground">
+                Initials placeholder · no portrait available in this view.
+              </p>
+            </>
+          )}
+        </DialogContent>
+      </Dialog>
+      <Dialog open={help} onOpenChange={setHelp}>
+        <DialogContent>
+          <DialogTitle className="text-lg font-semibold">
+            Your local demonstration
+          </DialogTitle>
+          <DialogDescription className="mt-2 text-xs leading-5 text-muted-foreground">
+            Use Demo controls to operate recognition, sync submissions and
+            prepare volunteers. The camera window runs on your PC.
+          </DialogDescription>
+          <ol className="mt-7 space-y-6 text-sm leading-6">
+            <li>
+              <strong className="font-medium">1. Launch the workspace</strong>
+              <p className="mt-2 text-xs text-muted-foreground">
+                Double-click Start Demo.cmd. It opens the API and dashboard.
+                Manual API fallback:
+              </p>
+              <code className="mt-2 block break-all rounded-md border bg-muted/40 p-3 text-[11px]">
+                uv run --frozen --extra vision uvicorn app.main:app --host
+                127.0.0.1 --port 8000
+              </code>
+            </li>
+            <li>
+              <strong className="font-medium">
+                2. Prepare and start recognition
+              </strong>
+              <p className="mt-2 text-xs text-muted-foreground">
+                In Demo controls, select the exam, sync submissions and start
+                recognition. Stop the camera before changing the gallery. Manual
+                camera fallback:
+              </p>
+              <code className="mt-2 block break-all rounded-md border bg-muted/40 p-3 text-[11px]">
+                uv run --frozen --extra vision python -m app.vision.attend
+                --exam CS101 --det-size 480 --threads 4
+              </code>
+            </li>
+            <li className="text-xs text-muted-foreground">
+              Run commands from the same backend folder. Keep the API and
+              dashboard local; there is no authentication for public hosting.
+            </li>
+          </ol>
+          <div className="mt-7 border-t pt-4 text-xs leading-5 text-muted-foreground">
+            “Identified” counts distinct session identities. “Present” includes
+            saved records from previous runs of the exam. Unidentified tracks
+            are not unique people. Academic index labels are presentation
+            metadata.
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
-    <Dialog open={!!selected} onOpenChange={open=>!open && setSelected(null)}><DialogContent><DialogTitle className="text-lg font-semibold">Student details</DialogTitle><DialogDescription className="mt-2 text-xs leading-5 text-slate-500">Identity linked to the enrollment record. Academic fields are locally supplied, not university-verified.</DialogDescription>{selected && <><div className="mt-8 flex flex-col items-center rounded-xl bg-slate-50 p-6"><Avatar name={selected.full_name} large/><p className="mt-4 text-lg font-semibold">{selected.full_name}</p><p className="mt-1 text-xs text-slate-500">{selected.student_no}</p><Badge className={`mt-4 ${selectedRecord?"bg-emerald-100 text-emerald-900":"bg-amber-100 text-amber-900"}`}>{selectedRecord?"Present":"Identified · attendance not recorded"}</Badge><p className="mt-3 text-[10px] text-slate-400">Initials shown · portrait not available in this view</p></div>{selectedAcademic?.is_demo_metadata && <p className="mt-5 rounded-lg border border-amber-100 bg-amber-50 p-3 text-[11px] leading-5 text-amber-900">Presentation metadata: CSC maps to Computer Science and Information Technology; year code 24 maps to Level 300 for this demonstration. These rules do not change student records or eligibility.</p>}<dl className="mt-6 divide-y divide-slate-100">{[["Programme",selectedAcademic?.programme || "Not supplied"],["Level / year",selectedAcademic?.level ? `Level ${selectedAcademic.level}` : "Not supplied"],["Department",selectedAcademic?.department || "Not supplied"],["Index programme code",selectedAcademic?.index_programme_code || "Not supplied"],["Index year code",selectedAcademic?.index_year_code || "Not supplied"],["Examination",exam?.course_title || "—"],["Building / venue",exam?.hall || "—"],["Recognized at",time(selectedRecognition?.at)],["Attendance recorded",time(selectedRecord?.recorded_at)],["Face samples",selected.face_samples],["Source",selectedRecord?.source || "Not recorded"]].map(([label,value])=><div key={String(label)} className="flex justify-between gap-5 py-3.5 text-xs"><dt className="shrink-0 text-slate-400">{label}</dt><dd className="text-right font-medium">{value}</dd></div>)}</dl></>}</DialogContent></Dialog>
-    <Dialog open={help} onOpenChange={setHelp}><DialogContent><DialogTitle className="text-lg font-semibold">Your local demonstration</DialogTitle><DialogDescription className="mt-3 text-sm leading-6 text-slate-500">Use Demo controls to operate recognition, sync submissions and prepare your volunteers. The camera window runs on your PC.</DialogDescription><ol className="mt-8 space-y-6 text-sm leading-6"><li><strong>1. Launch the workspace</strong><p className="mt-2 text-xs text-slate-500">Double-click Start Demo.cmd in the repository. It opens the API and dashboard. The manual API command is available as a fallback:</p><p className="mt-2 rounded-lg bg-slate-50 p-3 font-mono text-xs break-all">uv run --frozen --extra vision uvicorn app.main:app --host 127.0.0.1 --port 8000</p></li><li><strong>2. Use Demo controls</strong><p className="mt-2 text-xs text-slate-500">Select the exam, sync pending submissions and click Start recognition. Stop the camera before changing the gallery. The manual fallback is:</p><p className="mt-2 rounded-lg bg-slate-50 p-3 font-mono text-xs break-all">uv run --frozen --extra vision python -m app.vision.attend --exam CS101 --det-size 480 --threads 4</p></li><li className="text-slate-500">Run both commands from the same backend folder. The API and dashboard must stay local; no authentication has been added for public hosting.</li></ol><p className="mt-8 text-xs leading-5 text-slate-400">“Identified” counts distinct session identities. “Present” includes saved records from previous runs of the selected exam. Unknown tracks are not a count of unique people.</p></DialogContent></Dialog>
-  </div>;
+  );
 }
